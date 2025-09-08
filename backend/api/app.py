@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
+import os, json
+from collections import defaultdict
 
 app = Flask(__name__)
 CORS(app)
@@ -102,27 +104,115 @@ def get_model_config():
     # if not data:
     #     return jsonify({"success": False, "message": "请求参数必须为 JSON"}), 400
 
-    data = [
+    model_config = [
         {
-            "keyPrefix": "crocus",
-            "resource": "/models/crocus/",
-            "name": "12974_crocus_flower_v1_l3",
-            "upAxis": "-x",
-            "target": 0.05,
-            "season": 0
+            "season": 0,
+            "keyPrefix": "mint1",
+            "models": [
+                {
+                    "resource": "/models/mint/",
+                    "name": "mint_1",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.1, 0, 0],
+                },
+                {
+                    "resource": "/models/tree/",
+                    "name": "tree",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.1, 0, 0],
+                },
+                {
+                    "resource": "/models/mint/",
+                    "name": "mint_2",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [0.2, 0, 0],
+                },
+            ],
         },
         {
-            "keyPrefix": "plant2",
-            "resource": "/models/plant2/",
-            "name": "plants2",
-            "upAxis": "y",
-            "target": 0.005,
-            "season": 1
-        }
-        ]
+            "season": 1,
+            "keyPrefix": "mint1",
+            "models": [
+                {
+                    "resource": "/models/mint/",
+                    "name": "mint_2",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.2, 0, 0],
+                },
+            ],
+        },
+        {
+            "season": 2,
+            "keyPrefix": "mint3",
+            "models": [
+                {
+                    "resource": "/models/mint/",
+                    "name": "mint_3",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.3, 0, 0],
+                },
+                {
+                    "resource": "/models/mint/",
+                    "name": "mint_1",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [0.4, 0, 0],
+                },
+            ],
+        },
+        {
+            "season": 3,
+            "keyPrefix": "mint4",
+            "models": [
+                {
+                    "resource": "/models/mint/",
+                    "name": "mint_4",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.5, 0, 0],
+                },
+            ],
+        },
+    ]
+
+    return jsonify({"success": True, "message": "获取模型配置成功", "data": model_config})
 
 
-    return jsonify({"success": True, "message": "获取模型配置成功", "data": data})
 
+@app.route("/location_msg")
+def get_data():
+    # 假设文件路径在当前目录下的 data.json
+    file_path = os.path.join(os.path.dirname(__file__), "cn.json")
+
+    # 打开并读取 json 文件
+    with open(file_path, "r", encoding="utf-8") as f:
+        cities = json.load(f)  # 解析成 Python 字典/列表
+    # 构建省市树
+    tree = defaultdict(list)
+    for city in cities:
+        province = city["admin_name_zh"]
+        tree[province].append({
+            "city": city["city_zh"],
+            "lat": city["lat"],
+            "lng": city["lng"],
+            "population": city["population"],
+            "population_proper": city["population_proper"]
+        })
+
+    # 转成标准结构
+    province_tree = []
+    for province, city_list in tree.items():
+        province_tree.append({
+            "province": province,
+            "cities": city_list
+        })
+
+    # return jsonify(province_tree)
+    return jsonify({"success": True, "message": "获取模型配置成功", "data": province_tree})
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

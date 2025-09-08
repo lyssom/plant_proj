@@ -25,3 +25,11 @@ export const getModelConfig= (data: any) => {
         data
     })
 }
+
+
+export const getLocationMsg= () => {
+    return axios.request({
+        url: '/location_msg',
+        method: 'get',
+    })
+}
