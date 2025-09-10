@@ -1,5 +1,6 @@
-import { useRef, useState, useEffect, useMemo, use } from 'react';
-import { useLoader, Canvas, useFrame } from '@react-three/fiber';
+// @ts-nocheck
+import { useRef, useState, useEffect, useMemo } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader';
@@ -7,10 +8,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import SunCalc from "suncalc";
 import { Html } from "@react-three/drei";
 import * as THREE from 'three';
-import { useNavigate } from 'react-router-dom';
 import { ChevronRightIcon, MinusIcon } from '@chakra-ui/icons';
-import { getModelConfig, getLocationMsg } from './api';
-import { useThree } from '@react-three/fiber';
+import { getLocationMsg, computePlantsData, saveImage, savePdf } from './api';
 
 import {
   Box,
@@ -47,7 +46,8 @@ import {
   ModalHeader,
   ModalCloseButton,
   ModalBody,
-  MenuItem, Flex, Spacer } from "@chakra-ui/react";
+  ModalFooter,
+  Flex} from "@chakra-ui/react";
 
 
 const CELL_SIZE = 1;     
@@ -62,20 +62,6 @@ const SEASONS = [
   { name: '冬', value: 3, color: 'blue.400' }
 ];
 
-interface BoxProps {
-  position: [number, number, number];
-  onClick: () => void;
-  color: string;
-}
-function BoxGeometry({ position, onClick, color }: BoxProps) {
-  const mesh = useRef<THREE.Mesh>(null!);
-  return (
-    <mesh position={position} ref={mesh} onClick={onClick} castShadow receiveShadow>
-      <boxGeometry args={[CELL_SIZE * 0.98, 0.05, CELL_SIZE * 0.98]} />
-      <meshStandardMaterial color={color} />
-    </mesh>
-  );
-}
 
 type ColorState = boolean[][];
 
@@ -84,13 +70,15 @@ function ClickablePlane({
   cells,
   mode,
   terrainHeight,
-  flowerPositions
+  flowerPositions,
+  setWallPositions
 }: {
   onClick: (x: number, y: number) => void;
   cells: [number, number];
   mode: Mode;
   terrainHeight: number;
   flowerPositions: { x: number; y: number }[];
+  setWallPositions: React.Dispatch<React.SetStateAction<{ x: number; y: number; rotation: number }[]>>
 }) {
   const [colors, setColors] = useState<ColorState>(
     Array(cells[0]).fill(null).map(() => Array(cells[1]).fill(true))
@@ -117,7 +105,7 @@ function ClickablePlane({
   const [cellHeights, setCellHeights] = useState<Record<string, number>>({});
   const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null);
 
-  function handleClickPosition(x: number, y: number) {
+  function handleClickPosition(x: number, y: number, e: ThreeEvent<PointerEvent>) {
     if (mode === "normal") {
       handleClick(x, y);
     } else if (mode === "terrain") {
@@ -140,9 +128,9 @@ function ClickablePlane({
     }
   }, [terrainHeight, selectedCell]);
 
-  console.log(66666666)
-  console.log(flowerPositions)
-  console.log(66666666777)
+  // console.log(66666666)
+  // console.log(flowerPositions)
+  // console.log(66666666777)
 
   return (
     <group>
@@ -164,7 +152,7 @@ function ClickablePlane({
             <mesh
               key={key}
               position={[x * CELL_SIZE, height / 2, y * CELL_SIZE]}
-              onClick={() => handleClickPosition(x, y)}
+              onClick={(e) => handleClickPosition(x, y, e)}
               castShadow
               receiveShadow
             >
@@ -206,7 +194,13 @@ type GardenDrawerProps = {
   setSpaceNeeded: React.Dispatch<React.SetStateAction<boolean>>;
   spaceRatio: number;
   setSpaceRatio: React.Dispatch<React.SetStateAction<number>>;
-
+  plantsData: Plant[];
+  setPlantsData: React.Dispatch<React.SetStateAction<Plant[]>>;
+  PositionDatas: any[];
+  setLoaded: React.Dispatch<React.SetStateAction<boolean>>;
+  handleScreenshot: () => void;
+  wallOffset: string
+  setWalloffset: React.Dispatch<React.SetStateAction<string>>;
 };
 
 
@@ -277,17 +271,27 @@ export function GardenDrawer({
   cells, setCells, mode, setMode, treeHeight, setTreeHeight, 
   treeWidth, setTreeWidth, terrainHeight, setTerrainHeight,
   spaceNeeded, setSpaceNeeded, spaceRatio, setSpaceRatio,
+  plantsData, setPlantsData, PositionDatas, setLoaded,
+  handleScreenshot, 
+  wallOffset, setWallOffset
 
 }: GardenDrawerProps) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [step, setStep] = useState(0);
   const [style, setStyle] = useState("");
+  const [viewSeason, setViewSeason] = useState("");
   const [selectedPlants, setSelectedPlants] = useState<string[]>([]);
+  const svgRef = useRef<SVGSVGElement>(null);
+  // console.log(11111111)
+  // console.log(svgRef.current);
+  // console.log(11111111222)
 
   const handleClose = () => {
     setStep(0);
     onClose();
   };
+
+  
 
 
 
@@ -297,7 +301,15 @@ export function GardenDrawer({
     );
   };
 
-  console.log(mode)
+  // console.log(mode)
+  const MODE_MAP: Record<string, string> = {
+    normal: "铺装",
+    wall: "墙",
+    building: "建筑",
+    water: "水面",
+    tree: "乔木",
+    terrain: "地形",
+  };
   return (
     <>
       <Button onClick={onOpen}>设置花园</Button>
@@ -401,8 +413,37 @@ export function GardenDrawer({
 
                 <VStack align="start" spacing={3}>
                     <Text fontSize="lg" fontWeight="bold" color="teal.600">
-                      正在设置: {mode}
+                      正在设置: {MODE_MAP[mode] || mode}
                     </Text>
+                    {mode === "wall" && (
+                      <HStack spacing={4} alignItems="center">
+                        <Button
+                          colorScheme={wallOffset === "top" ? "blue" : "gray"}
+                          onClick={() => setWallOffset("top")}
+                        >
+                          上
+                        </Button>
+                        <Button
+                          colorScheme={wallOffset === "bottom" ? "blue" : "gray"}
+                          onClick={() => setWallOffset("bottom")}
+                        >
+                          下
+                        </Button>
+                        <Button
+                          colorScheme={wallOffset === "left" ? "blue" : "gray"}
+                          onClick={() => setWallOffset("left")}
+                        >
+                          左
+                        </Button>
+                        <Button
+                          colorScheme={wallOffset === "right" ? "blue" : "gray"}
+                          onClick={() => setWallOffset("right")}
+                        >
+                          右
+                        </Button>
+
+                      </HStack>
+                    )}
                     {mode === "tree" && (
                       <HStack spacing={4} alignItems="center">
                         {/* 树高 */}
@@ -522,6 +563,27 @@ export function GardenDrawer({
                   </Stack>
                 </MenuList>
               </Menu>
+
+              <FormLabel>花园的主要观赏季节</FormLabel>
+                <Select
+                  placeholder="请选择花园的主要观赏季节"
+                  value={viewSeason}
+                  onChange={(e) => setViewSeason(e.target.value)}
+                >
+                  <option value="none">无</option>
+                  <option value="spring">春</option>
+                  <option value="summer">夏</option>
+                  <option value="automn">秋</option>
+                  <option value="winter">冬</option>
+                </Select>
+            </FormControl>
+
+            )}
+
+            {step === 4 && (
+              <FormControl>
+                <Button onClick={() => handleScreenshot()}>导出</Button><br />
+                <Button>购买植物</Button>
             </FormControl>
 
             )}
@@ -544,7 +606,7 @@ export function GardenDrawer({
                 </Button>
               </>
             )}
-             {step === 2 && (
+            {step === 2 && (
               <>
                 <Button variant="ghost" mr={3} onClick={() => setStep(1)}>
                   上一步
@@ -560,10 +622,20 @@ export function GardenDrawer({
               <Button variant="ghost" mr={3} onClick={() => setStep(2)}>
                   上一步
                 </Button>
-              {/* <Button colorScheme="green" onClick={onClose}>
-                完成
-              </Button> */}
-              <GardenModal />
+              <GardenModal plantsData={plantsData} setPlantsData={setPlantsData} PositionDatas={PositionDatas} cells={cells} setLoaded={setLoaded} svgRef={svgRef}/>
+              <Button colorScheme="blue" ml={3} onClick={() => setStep(4)}>
+                下一步
+              </Button>
+              </>
+            )}
+            {step === 4 && (
+              <>
+                <Button variant="ghost" mr={3} onClick={() => setStep(3)}>
+                  上一步
+                </Button>
+                <Button colorScheme="blue" onClick={() => onClose()}>
+                  完成
+                </Button>
               </>
             )}
           </DrawerFooter>
@@ -573,74 +645,68 @@ export function GardenDrawer({
   );
 }
 
-function Object3DModel({ Reasource, name, position, upAxis, target }: {Reasource: string, name: string, position: [number, number, number], upAxis: string, target: number }) {
-  const [obj, setObj] = useState<THREE.Object3D | null>(null);
-  const ref = useRef<THREE.Object3D>(null!);
+// function Object3DModel({ Reasource, name, position, upAxis, target }: {Reasource: string, name: string, position: [number, number, number], upAxis: string, target: number }) {
+//   const [obj, setObj] = useState<THREE.Object3D | null>(null);
+//   const ref = useRef<THREE.Object3D>(null!);
 
-  useEffect(() => {
-    const mtlLoader = new MTLLoader();
-    mtlLoader.setResourcePath(Reasource);
-    mtlLoader.setPath(Reasource);
-    mtlLoader.load(`${name}.mtl`, (materials) => {
-      materials.preload();
-      const objLoader = new OBJLoader();
-      objLoader.setMaterials(materials);
-      objLoader.setPath(Reasource);
-      objLoader.load(`${name}.obj`, (loaded) => {
-        loaded.traverse((child: any) => {
-          if (child.isMesh) {
-            child.material.side = THREE.DoubleSide;
-            child.material.needsUpdate = true;
-            child.castShadow = true;
-            child.receiveShadow = true;
-          }
-        });
+//   useEffect(() => {
+//     const mtlLoader = new MTLLoader();
+//     mtlLoader.setResourcePath(Reasource);
+//     mtlLoader.setPath(Reasource);
+//     mtlLoader.load(`${name}.mtl`, (materials) => {
+//       materials.preload();
+//       const objLoader = new OBJLoader();
+//       objLoader.setMaterials(materials);
+//       objLoader.setPath(Reasource);
+//       objLoader.load(`${name}.obj`, (loaded) => {
+//         loaded.traverse((child: any) => {
+//           if (child.isMesh) {
+//             child.material.side = THREE.DoubleSide;
+//             child.material.needsUpdate = true;
+//             child.castShadow = true;
+//             child.receiveShadow = true;
+//           }
+//         });
 
-        if (upAxis === 'z') {
-          loaded.rotation.x = Math.PI / 2;
-        } else if (upAxis === 'x') {
-          loaded.rotation.x = Math.PI / 2;
-        } else if (upAxis === 'y') {
-          loaded.rotation.y = Math.PI / 2;
-        } else if (upAxis === '-z') {
-          loaded.rotation.x = -Math.PI / 2;
-        } else if (upAxis === '-x') {
-          loaded.rotation.x = -Math.PI / 2;
-        } else if (upAxis === '-y') {
-          loaded.rotation.y = -Math.PI / 2;
-        }
-        setObj(loaded);
-      });
-    });
-  }, []);
+//         if (upAxis === 'z') {
+//           loaded.rotation.x = Math.PI / 2;
+//         } else if (upAxis === 'x') {
+//           loaded.rotation.x = Math.PI / 2;
+//         } else if (upAxis === 'y') {
+//           loaded.rotation.y = Math.PI / 2;
+//         } else if (upAxis === '-z') {
+//           loaded.rotation.x = -Math.PI / 2;
+//         } else if (upAxis === '-x') {
+//           loaded.rotation.x = -Math.PI / 2;
+//         } else if (upAxis === '-y') {
+//           loaded.rotation.y = -Math.PI / 2;
+//         }
+//         setObj(loaded);
+//       });
+//     });
+//   }, []);
 
-  useFrame(() => {
-    if (ref.current) {
-      ref.current.scale.x = Math.min(ref.current.scale.x + 0.01, target);
-      ref.current.scale.y = Math.min(ref.current.scale.y + 0.01, target);
-      ref.current.scale.z = Math.min(ref.current.scale.z + 0.01, target);
-    }
-  });
+//   useFrame(() => {
+//     if (ref.current) {
+//       ref.current.scale.x = Math.min(ref.current.scale.x + 0.01, target);
+//       ref.current.scale.y = Math.min(ref.current.scale.y + 0.01, target);
+//       ref.current.scale.z = Math.min(ref.current.scale.z + 0.01, target);
+//     }
+//   });
 
-  if (!obj) return null;
+//   if (!obj) return null;
 
-  return (
-    <primitive
-      ref={ref}
-      object={obj}
-      position={position}
-      scale={[0, 0, 0]}        
-    />
-  );
-}
+//   return (
+//     <primitive
+//       ref={ref}
+//       object={obj}
+//       position={position}
+//       scale={[0, 0, 0]}        
+//     />
+//   );
+// }
 
 
-  const modelInfo = {
-    name: "乔木",
-    height: "约 5 米",
-    type: "常绿树",
-    description: "适合园林景观，美化环境，提供遮荫。",
-  };
 
 function ObjectGLBModel({
   Reasource,
@@ -659,8 +725,8 @@ function ObjectGLBModel({
   const ref = useRef<THREE.Object3D>(null!);
   const [hovered, setHovered] = useState(false);
 
-  console.log(Reasource)
-  console.log(name)
+  // console.log(Reasource)
+  // console.log(name)
 
   useEffect(() => {
     const loader = new GLTFLoader();
@@ -693,7 +759,7 @@ function ObjectGLBModel({
       }
 
       const box = new THREE.Box3().setFromObject(model);
-      const height = box.max.y - box.min.y;
+      // const height = box.max.y - box.min.y;
       model.position.y -= box.min.y; // 把底部贴到 y=0
 
       setObj(model);
@@ -751,73 +817,6 @@ function ObjectGLBModel({
   );
 }
 
-
-
-// ======= 顶栏组件 =======
-function TopBar() {
-  const navigate = useNavigate();
-
-  return (
-    <Flex
-      as="div"
-      position="fixed"
-      top={0}
-      left={0}
-      right={0}
-      height="50px"
-      bg="#222"
-      color="white"
-      align="center"
-      px={6}
-      zIndex={1000}
-    >
-      {/* 菜单按钮（靠左或中间，不挨着登录按钮） */}
-      <Menu>
-        <MenuButton
-          as={Button}
-          variant="outline"
-          colorScheme="teal"
-        >
-          菜单
-        </MenuButton>
-        <MenuList bg="#2D3748" color="#1c1d1dff" borderColor="#4A5568" boxShadow="md">
-          <MenuItem
-            _hover={{ bg: "#4A5568", color: "#FFFFFF" }}
-            onClick={() => navigate("/projects")}
-          >
-            建成项目
-          </MenuItem>
-          <MenuItem
-            _hover={{ bg: "#4A5568", color: "#FFFFFF" }}
-            onClick={() => navigate("/events")}
-          >
-            往期活动
-          </MenuItem>
-          <MenuItem
-            _hover={{ bg: "#4A5568", color: "#FFFFFF" }}
-            onClick={() => navigate("/research")}
-          >
-            研究成果
-          </MenuItem>
-        </MenuList>
-      </Menu>
-
-      {/* Spacer 占位，使登录按钮在最右 */}
-      <Spacer />
-
-      {/* 登录按钮 */}
-      <Button
-        variant="outline"
-        colorScheme="whiteAlpha"
-        onClick={() => navigate("/login")}
-      >
-        登录
-      </Button>
-    </Flex>
-  );
-}
-
-export default TopBar;
 
 
 function Timeline({ season, setSeason, isPlaying, togglePlay }: {season: number, setSeason: (season: number) => void, isPlaying: boolean, togglePlay: () => void}) {
@@ -1093,9 +1092,9 @@ function WaterTile({ position }: { position: [number, number, number] }) {
 
 interface WallTileProps {
   position: [number, number, number];
-  rotation?: [number, number, number]; // 可选的旋转参数
+  rotation: [number, number, number]; // 可选的旋转参数
 }
-export function WallTile({ position, rotation = [0, 0, 0] }: WallTileProps) {
+export function WallTile({ position, rotation }: WallTileProps) {
   // const texture = useLoader(THREE.TextureLoader, "/textures/brick_diffuse.jpg");
   // texture.wrapS = THREE.RepeatWrapping;
   // texture.wrapT = THREE.RepeatWrapping;
@@ -1107,6 +1106,10 @@ export function WallTile({ position, rotation = [0, 0, 0] }: WallTileProps) {
     tex.repeat.set(1, 1);
     return tex;
   }, []);
+
+  // console.log(222)
+
+  // console.log(position);
   return (
     <mesh position={position} rotation={rotation} castShadow receiveShadow>
       <boxGeometry args={[1, 1, 0.2]} />
@@ -1119,7 +1122,7 @@ function Building({ position }: { position: [number, number, number] }) {
   return (
     <mesh position={position} castShadow receiveShadow>
       {/* 比墙大一些，像一个小房子 */}
-      <boxGeometry args={[1.5, 2, 1.5]} />
+      <boxGeometry args={[1, 2, 1]} />
       <meshStandardMaterial color="orange" />
     </mesh>
   );
@@ -1172,75 +1175,191 @@ interface Plant {
   color: string;
 }
 
-const plantData: Plant[] = [
-  { position: { x: 0, y:0 }, type: "针芒", color: "#6BAF92" },
-  { position: { x: 1, y:0}, type: "鼠尾草", color: "#A88ED0" },
-  { position: { x: 2, y:1}, type: "落新妇", color: "#F3A6B0" },
-  { position: { x: 3, y:2}, type: "松果菊", color: "#E58B4A" },
-  { position: { x: 4, y:1}, type: "薰衣草", color: "#9A66CC" },
-];
+// const plantData: Plant[] = [
+//   { position: { x: 0, y:0 }, type: "针芒", color: "#6BAF92" },
+//   { position: { x: 1, y:0}, type: "鼠尾草", color: "#A88ED0" },
+//   { position: { x: 2, y:1}, type: "落新妇", color: "#F3A6B0" },
+//   { position: { x: 3, y:2}, type: "松果菊", color: "#E58B4A" },
+//   { position: { x: 4, y:1}, type: "薰衣草", color: "#9A66CC" },
+// ];
 
-export function GardenModal() {
+export function GardenModal(
+  {plantsData, setPlantsData, PositionDatas, cells, setLoaded, svgRef}: 
+  {
+    plantsData: Plant[], 
+    setPlantsData: React.Dispatch<React.SetStateAction<Plant[]>> , 
+    PositionDatas: any[], 
+    cells: [number, number], 
+    setLoaded: React.Dispatch<React.SetStateAction<boolean>>
+    svgRef: React.RefObject<SVGSVGElement>
+  }
+) {
   const { isOpen, onOpen, onClose } = useDisclosure();
+
 
   const cellSize = 60; // 每个格子大小
   const radius = 25; // 圆的半径
+  console.log(661111111111);
+  console.log(svgRef);
+  console.log(666111111111122);
+
+
+  const handleOpen = async () => {
+    try {
+      // const data = {}
+      const res = await computePlantsData(PositionDatas);
+      // console.log(res);
+      // console.log(res.data);
+      setPlantsData(res.data.data);
+      // console.log("更新后的 modelConfig:", res.data.data);
+    } catch (err) {
+      console.error("计算出错:", err);
+    }
+
+    // 再打开 Drawer/Menu
+    onOpen();
+  };
+
+
+  const zoneList = Array.from(
+    new Map(
+      plantsData.map(p => [p.color, { color: p.color, name: p.type || p.color }])
+    ).values()
+  );
+
+  // 生成植物类型图例
+  const plantTypeList = Array.from(
+    new Map(
+      plantsData.map(p => [p.plant.name, { name: p.plant.name, color: p.plant.color }])
+    ).values()
+  );
+
+
+  
+  function handleLoadGarden() {
+    setLoaded(true);
+    onClose()
+  }
 
   return (
     <>
-      <Button colorScheme="teal" onClick={onOpen}>
+      <Button colorScheme="teal" onClick={handleOpen}>
         查看花园布局
       </Button>
 
-      <Modal isOpen={isOpen} onClose={onClose} size="6xl">
+      <Modal isOpen={isOpen} onClose={onClose} size="4xl">
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>花园二维平面图</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <svg
-              width={600}
-              height={400}
-              style={{ border: "1px solid #ccc", background: "#fdfdfd" }}
-            >
-              {/* 绘制格子 */}
-              {Array.from({ length: 10 }).map((_, i) =>
-                Array.from({ length: 6 }).map((_, j) => (
-                  <rect
-                    key={`${i}-${j}`}
-                    x={i * cellSize}
-                    y={j * cellSize}
-                    width={cellSize}
-                    height={cellSize}
-                    fill="none"
-                    stroke="#ddd"
-                  />
-                ))
-              )}
+            <Flex>
+              <Box>
+                <svg ref={svgRef}
+                  width={600}
+                  height={600}
+                  style={{ border: "1px solid #ccc", background: "#fdfdfd" }}
+                >
+                  {/* 绘制格子 */}
+                  {Array.from({ length: cells[0] }).map((_, i) =>
+                    Array.from({ length: cells[1] }).map((_, j) => (
+                      <rect
+                        key={`${i}-${j}`}
+                        x={i * cellSize}
+                        y={j * cellSize}
+                        width={cellSize}
+                        height={cellSize}
+                        fill="none"
+                        stroke="#ddd"
+                      />
+                    ))
+                  )}
 
-              {/* 绘制植物 */}
-              {plantData.map((plant, idx) => (
-                <g key={idx}>
-                  <circle
-                    cx={plant.position.x * cellSize + cellSize / 2}
-                    cy={plant.position.y * cellSize + cellSize / 2}
-                    r={radius}
-                    fill={plant.color}
-                    opacity={0.7}
-                  />
-                  <text
-                    x={plant.position.x * cellSize + cellSize / 2}
-                    y={plant.position.y * cellSize + cellSize / 2 + 5}
-                    fontSize="12"
-                    textAnchor="middle"
-                    fill="#000"
-                  >
-                    {plant.type}
-                  </text>
-                </g>
-              ))}
-            </svg>
-          </ModalBody>
+                  {/* 绘制植物 */}
+                  {plantsData.map((plant, idx) => {
+                    const x = plant.position.x * cellSize;
+                    const y = plant.position.y * cellSize;
+
+                    return (
+                      <g key={idx}>
+                        {/* 背景格子，只显示分区颜色 */}
+                        <rect
+                          x={x}
+                          y={y}
+                          width={cellSize}
+                          height={cellSize}
+                          fill={plant.color || "#eee"} // 分区颜色
+                          opacity={0.3} // 半透明
+                        />
+                        {/* 圆，显示植物颜色 */}
+                        <circle
+                          cx={x + cellSize / 2}
+                          cy={y + cellSize / 2}
+                          r={radius}
+                          fill={plant.plant.color}
+                          opacity={0.7}
+                        />
+                        {/* 文字 */}
+                        <text
+                          x={x + cellSize / 2}
+                          y={y + cellSize / 2 + 5}
+                          fontSize="12"
+                          textAnchor="middle"
+                          fill="#000"
+                          dominantBaseline="middle"
+                        >
+                          {plant.plant.name}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </Box>
+              {/* 右侧图例 */}
+        <Box ml={4}>
+          <Text fontWeight="bold" mb={2}>图例</Text>
+          {/* 假设有几个分区类型 */}
+          {zoneList.map((zone) => (
+            <Flex key={zone.name} align="center" mb={1}>
+              <Box
+                width="20px"
+                height="20px"
+                bg={zone.color}
+                opacity={0.3}
+                mr={2}
+              />
+              <Text>{zone.name}</Text>
+            </Flex>
+          ))}
+
+          {/* 植物颜色示意 */}
+          <Text fontWeight="bold" mt={4} mb={2}>植物颜色</Text>
+          {plantTypeList.map((plantType) => (
+            <Flex key={plantType.name} align="center" mb={1}>
+              <Box
+                width="20px"
+                height="20px"
+                bg={plantType.color}
+                opacity={0.7}
+                mr={2}
+                borderRadius="50%"
+              />
+              <Text>{plantType.name}</Text>
+            </Flex>
+          ))}
+
+        </Box>
+        </Flex>
+        </ModalBody>
+
+        <ModalFooter>
+          <Button colorScheme="teal" 
+          onClick={handleLoadGarden}
+          >
+            加载花园
+          </Button>
+        </ModalFooter>
+
         </ModalContent>
       </Modal>
     </>
@@ -1248,32 +1367,14 @@ export function GardenModal() {
 }
 
 
-function ScreenshotButton() {
-  const { gl } = useThree();
-
-  const handleScreenshot = () => {
-    const dataURL = gl.domElement.toDataURL("image/png");
-    const link = document.createElement("a");
-    link.href = dataURL;
-    link.download = "screenshot.png";
-    link.click();
-  };
-
-  
-  return (
-    <Html position={[0, 0, 0]}>
-      <button onClick={handleScreenshot}>截图</button>
-    </Html>
-  )
-}
 
 // ======= 主页面（含Canvas） =======
 export function GardenPage() {
   const [objectPositions, setObjectPositions] = useState<{x: number; y: number}[]>([]);
   const [season, setSeason] = useState(0); // 0:春, 1:夏, 2:秋, 3:冬
   const [isPlaying, setIsPlaying] = useState(false);
-  const [renderModels, setRenderModels] = useState(false); // 是否点击按钮开始渲染
-  const [modelConfig, setModelConfig] = useState<any[]>([]);
+  // const [renderModels, setRenderModels] = useState(false); // 是否点击按钮开始渲染
+  // const [modelConfig, setModelConfig] = useState<any[]>([]);
   const [waterPositions, setWaterPositions] = useState<{x: number; y: number}[]>([]);
   const [treePositions, setTreePositions] = useState<
       { x: number; y: number; width: number; height: number }[]
@@ -1299,45 +1400,157 @@ export function GardenPage() {
   const [spaceRatio, setSpaceRatio] = useState(30);
   const [flowerPositions, setFlowerPositions] = useState<{x: number; y: number}[]>([]);
 
+  const [plantsData, setPlantsData] = useState<Plant[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  type WallOffset = "top" | "bottom" | "left" | "right";
+  const [wallOffset, setWallOffset] = useState<WallOffset>("top");
+
   const HALF_X = (cells[0] * CELL_SIZE) / 2;
   const HALF_Y = (cells[1] * CELL_SIZE) / 2;
   const GROUP_OFFSET: [number, number, number] = [
-    -HALF_X + CELL_SIZE / 2,   
+    -5,  
     0,
-    -HALF_Y + CELL_SIZE / 2,
+   -5
   ];
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const handleScreenshot = async () => {
+    if (!canvasRef.current) return;
+
+    const payloads = [];
+    // console.log(222222229933)
+
+    for (const s of SEASONS.map(s => s.value)) {
+      setSeason(s);
+      console.log(season);
+
+      // 等画布渲染和模型加载
+      const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+      // await sleep(10000);
+
+      // 截图
+      const dataURL = canvasRef.current.toDataURL("image/png");
+
+      // 上传到后端
+      const payload = { filename: `${season}.png`, data: dataURL.split(",")[1] };
+      // await saveImage(payload);
+
+      payloads.push(payload);
+
+      // // 可选：下载
+      // const link = document.createElement("a");
+      // link.href = dataURL;
+      // link.download = `${season}.png`;
+      // link.click();
+    }
+
+    const radius = 25;
+    const canvas = document.createElement("canvas");
+    const cellSize = 50;
+    canvas.width = cells[0] * cellSize;
+    canvas.height = cells[1] * cellSize;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // 画格子和植物
+    plantsData.forEach(plant => {
+      ctx.fillStyle = plant.color || "#eee";
+      ctx.globalAlpha = 0.3;
+      ctx.fillRect(plant.position.x * cellSize, plant.position.y * cellSize, cellSize, cellSize);
+
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = plant.plant.color;
+      ctx.beginPath();
+      ctx.arc(plant.position.x * cellSize + cellSize/2, plant.position.y * cellSize + cellSize/2, radius, 0, Math.PI*2);
+      ctx.fill();
+    });
+
+    // 转成 base64 PNG
+    const pngDataUrl = canvas.toDataURL("image/png"); 
+
+
+    payloads.push({ filename: "garden.png", data: pngDataUrl.split(",")[1] });
+    
+    console.log(2222222299)
+    const response = await savePdf(payloads);
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "seasons.pdf";
+    link.click();
+  };
+
+
+  // const handleScreenshot = () => {
+  //   const dataURL = gl.domElement.toDataURL("image/png");
+  //   const link = document.createElement("a");
+  //   link.href = dataURL;
+  //   link.download = "screenshot.png";
+  //   link.click();
+  // };
+
 
 
   const handleCellClick = (x: number, y: number) => {
+    console.log("ccccccccc")
     if (mode === "normal") {
       setObjectPositions(prev => [...prev, {x, y}]);
     } else if (mode === "water") {
       setWaterPositions(prev => [...prev, {x, y}]);
     } else if (mode === "wall") {
+      let rotation = 0;
+
+      let wallX = 0;
+      let wallZ = 0;
+
+      switch (wallOffset) {
+        case "left":
+          wallX = x- 0.5;          // 左边界
+          wallZ = y;    // 垂直居中
+          rotation = Math.PI / 2;
+          break;
+        case "right":
+          wallX = x + 0.5;      // 右边界
+          wallZ = y;
+          rotation = Math.PI / 2;
+          break;
+        case "top":
+          wallX = x;
+          wallZ = y -0.5;      // 上边界
+          rotation = 0;
+          break;
+        case "bottom":
+          wallX = x ;
+          wallZ = y + 0.5;          // 下边界
+          rotation = 0;
+          break;
+      }
+
       setWallPositions(prev => [
       ...prev,
-      { x, y, rotation: currentRotation }
+      { x: wallX, y: wallZ, rotation: rotation }
     ]);
     } else if (mode === "building") {
       setBuildingPositions(prev => [...prev, {x, y}]);
     } else if (mode === "tree") {
       setTreePositions([...treePositions,
-    { x, y, width: treeWidth, height: treeHeight }]);
+        { x, y, width: treeWidth, height: treeHeight }]);
     } else if (mode === "flower") {
-    setFlowerPositions(prev => {
-      const exists = prev.some(pos => pos.x === x && pos.y === y);
-      if (!exists) {
-        return [...prev, { x, y }];
-      }
-      return prev; // 已存在则不变
-    });
-  } else if (mode === "grass") {
-    setFlowerPositions(prev =>
-      prev.filter(pos => !(pos.x === x && pos.y === y))
-    );
-  }
+      setFlowerPositions(prev => {
+        const exists = prev.some(pos => pos.x === x && pos.y === y);
+        if (!exists) {
+          return [...prev, { x, y }];
+        }
+        return prev; 
+      });
+    } else if (mode === "grass") {
+      setFlowerPositions(prev =>
+        prev.filter(pos => !(pos.x === x && pos.y === y))
+      );
+    }
   };
-
 
   const togglePlay = () => {
     setIsPlaying(!isPlaying);
@@ -1370,19 +1583,19 @@ export function GardenPage() {
   //   );
   // };
 
-  const toggleRender = () => {
-    if (renderModels == false) {
-      const data = {}
-      getModelConfig(data).then((res) => {
-        console.log(res);
-        console.log(res.data);
-        setModelConfig(res.data.data);
-        console.log(modelConfig)
-      })
-    }
+  // const toggleRender = () => {
+  //   if (renderModels == false) {
+  //     const data = {}
+  //     getModelConfig(data).then((res) => {
+  //       console.log(res);
+  //       console.log(res.data);
+  //       setModelConfig(res.data.data);
+  //       console.log(modelConfig)
+  //     })
+  //   }
 
-    setRenderModels(!renderModels)
-  };
+  //   setRenderModels(!renderModels)
+  // };
 
 
   useEffect(() => {
@@ -1405,7 +1618,7 @@ export function GardenPage() {
     );
 
     // 随机挑选 70%
-    console.log(spaceRatio)
+    // console.log(spaceRatio)
     // flowerRatio = (100-spaceRatio)/100
     const targetCount = Math.floor(available.length * (100-spaceRatio)/100);
     const shuffled = [...available].sort(() => Math.random() - 0.5);
@@ -1416,22 +1629,41 @@ export function GardenPage() {
     }
 
     // setFlowerPositions(selected);
-    console.log(1111111)
-    console.log(flowerPositions)
-    console.log(111111122)
+    // console.log(1111111)
+    // console.log(flowerPositions)
+    // console.log(111111122)
   }, [cells, spaceRatio, spaceNeeded]);
 
-  console.log(11199)
+  // console.log(11199)
 
-  console.log(flowerPositions)
-  console.log(111998888)
+  // console.log(flowerPositions)
+  // console.log(111998888)
+
+  const PositionDatas = {
+    "flowerPositions":flowerPositions,
+    "waterPositions": waterPositions,
+    "buildingPositions": buildingPositions,
+    "wallPositions": wallPositions,
+    "treePositions": treePositions,
+    "objectPositions": objectPositions
+  }
+
+  // console.log(PositionDatas)
+
+  // console.log(plantsData)
+  const rows = cells[0];
+  const cols = cells[1];
+
+  const offsetX = cols % 2 === 0 ? CELL_SIZE / 2 : 1;
+  const offsetY = rows % 2 === 0 ? CELL_SIZE / 2 : 0;
 
 
+
+ console.log(offsetX,offsetY)
 
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
-      <TopBar />
-      <Canvas camera={{ position: [10, 10, 10], fov: 50 }} shadows style={{ width: '100%', height: '100%' }} gl={{ preserveDrawingBuffer: true }}>
+      <Canvas ref={canvasRef} camera={{ position: [10, 10, 10], fov: 50 }} shadows style={{ width: '100%', height: '100%' }} gl={{ preserveDrawingBuffer: true }}>
         <ambientLight intensity={0.6} />
         <DirectionalSun latitude={latitude} longitude={longitude} date={date} />
         <mesh
@@ -1449,12 +1681,13 @@ export function GardenPage() {
           infiniteGrid={false}
           followCamera={false}
           fadeDistance={100}
-          position={[HALF_X - CELL_SIZE / 2, 0.02, HALF_Y - CELL_SIZE / 2]}
+          position={[HALF_X - offsetY, 0.02, HALF_Y - offsetX]}
+          // position={[HALF_X, 0.02, HALF_Y]}
         />
-        <ClickablePlane onClick={handleCellClick} cells={cells} mode={mode} terrainHeight={terrainHeight} flowerPositions={flowerPositions}/>
+        <ClickablePlane onClick={handleCellClick} cells={cells} mode={mode} terrainHeight={terrainHeight} flowerPositions={flowerPositions} setWallPositions={setWallPositions}/>
 
 
-        {modelConfig
+        {/* {modelConfig
           .filter((cfg) => cfg.season === season)
           .map((cfg) =>
             objectPositions.map(([x, y], i) => (
@@ -1475,7 +1708,33 @@ export function GardenPage() {
                 ))}
               </group>
             ))
+          )} */}
+
+          {loaded &&
+          plantsData.map((plantCfg, i) =>
+            plantCfg.models
+              .filter((seasonCfg) => seasonCfg.season === season)
+              .map((seasonCfg, si) => (
+                <group key={`${plantCfg.plant.id}-group-${i}-${si}`}>
+                  {seasonCfg.models.map((m, j) => (
+                    <ObjectGLBModel
+                      key={`${seasonCfg.keyPrefix}-${j}-${i}`}
+                      Reasource={m.resource}
+                      name={m.name}
+                      position={[
+                        plantCfg.position.x * CELL_SIZE + (m.offset?.[0] ?? 0),
+                        (m.offset?.[1] ?? 0),
+                        plantCfg.position.y * CELL_SIZE + (m.offset?.[2] ?? 0),
+                      ]}
+                      upAxis={m.upAxis}
+                      target={[m.target, m.target, m.target]}
+                    />
+                  ))}
+                </group>
+              ))
           )}
+
+          
 
           {waterPositions.map(({x, y}, i) => (
             <WaterTile key={`water-${i}`} position={[x * CELL_SIZE, 0, y * CELL_SIZE]} />
@@ -1485,7 +1744,7 @@ export function GardenPage() {
             <WallTile
               key={`wall-${i}`}
               position={[wall.x * CELL_SIZE, 0.5, wall.y * CELL_SIZE]}
-              // rotation={[0, wall.rotation, 0]}
+              rotation={[0, wall.rotation, 0]}
             />
           ))}
 
@@ -1512,7 +1771,7 @@ export function GardenPage() {
         </group>
         <OrbitControls enablePan enableZoom enableRotate minDistance={5} maxDistance={50} />
 
-        <ScreenshotButton />
+        {/* <ScreenshotButton /> */}
 
       </Canvas>
 
@@ -1541,6 +1800,13 @@ export function GardenPage() {
         setSpaceNeeded={setSpaceNeeded}
         spaceRatio={spaceRatio}
         setSpaceRatio={setSpaceRatio}
+        plantsData={plantsData}
+        setPlantsData={setPlantsData}
+        PositionDatas={PositionDatas}
+        setLoaded={setLoaded}
+        handleScreenshot = {handleScreenshot}
+        wallOffset={wallOffset}
+        setWallOffset={setWallOffset}
         />
       </Box>
     </div>

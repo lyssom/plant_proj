@@ -12,10 +12,14 @@ class HttpRequest {
   }
 
   getAuth() {
-    if (localStorage.getItem("token") != null) {
+    const token = localStorage.getItem("token");
+    console.log(token);
+    if (token) {
       this.headers = {
-        "Authorization": localStorage.getItem("token") as string
+        "Authorization": `Bearer ${token}`,
       };
+    } else {
+      this.headers = {};
     }
   }
 

@@ -16,23 +16,42 @@ export function LoginPage() {
     try {
       const payload = { username, password };
       const response = await login(payload);
-      console.log('登录成功:', response);
 
-      toast({
-        title: '登录成功',
-        status: 'success',
-        duration: 2000,
-        isClosable: true,
-        position: 'top',
-      });
+      console.log(response)
+      console.log(response.data.success);
 
-      navigate('/');
+      if (response.data.success) {
+        // ✅ 保存 token 和用户名
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('username', response.data.username);
+
+        window.dispatchEvent(new Event("storage"));
+
+        toast({
+          title: '登录成功',
+          status: 'success',
+          duration: 2000,
+          isClosable: true,
+          position: 'top',
+        });
+
+        navigate('/');
+      } else {
+        toast({
+          title: '登录失败',
+          description: response.data.message || '用户名或密码错误',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+          position: 'top',
+        });
+      }
     } catch (error: any) {
       console.error('登录失败:', error);
 
       toast({
         title: '登录失败',
-        description: error.response?.data?.msg || error.message,
+        description: error.response?.data?.message || error.message,
         status: 'error',
         duration: 3000,
         isClosable: true,
