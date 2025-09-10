@@ -476,19 +476,12 @@ def partition(data):
             "season": 0,
             "keyPrefix": "mint1",
             "models": [
-                {
-                    "resource": "/models/mint/",
-                    "name": "mint_1",
+                {                
+                    "resource": "/models/tree/",
+                    "name": "tree",
                     "upAxis": "y",
                     "target": 1,
                     "offset": [-0.1, 0, 0],
-                },
-                {
-                    "resource": "/models/mint/",
-                    "name": "mint_2",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [0.2, 0, 0],
                 },
             ],
         },
@@ -496,9 +489,15 @@ def partition(data):
             "season": 1,
             "keyPrefix": "mint1",
             "models": [
-                {
-                    "resource": "/models/mint/",
-                    "name": "mint_2",
+                                {
+                    "resource": "/models/tree/",
+                    "name": "tree",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.1, 0, 0],
+                },                {
+                    "resource": "/models/tree/",
+                    "name": "tree",
                     "upAxis": "y",
                     "target": 1,
                     "offset": [-0.2, 0, 0],
@@ -509,20 +508,25 @@ def partition(data):
             "season": 2,
             "keyPrefix": "mint3",
             "models": [
-                {
-                    "resource": "/models/mint/",
-                    "name": "mint_3",
+                {                
+                    "resource": "/models/tree/",
+                    "name": "tree",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.1, 0, 0],
+                },{              
+                    "resource": "/models/tree/",
+                    "name": "tree",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.2, 0, 0],
+                },{                
+                    "resource": "/models/tree/",
+                    "name": "tree",
                     "upAxis": "y",
                     "target": 1,
                     "offset": [-0.3, 0, 0],
-                },
-                {
-                    "resource": "/models/mint/",
-                    "name": "mint_1",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [0.4, 0, 0],
-                },
+                }
             ],
         },
         {
@@ -530,12 +534,31 @@ def partition(data):
             "keyPrefix": "mint4",
             "models": [
                 {
-                    "resource": "/models/mint/",
-                    "name": "mint_4",
+                                
+                    "resource": "/models/tree/",
+                    "name": "tree",
                     "upAxis": "y",
                     "target": 1,
-                    "offset": [-0.5, 0, 0],
-                },
+                    "offset": [-0.1, 0, 0],
+                },{              
+                    "resource": "/models/tree/",
+                    "name": "tree",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.2, 0, 0],
+                },{                
+                    "resource": "/models/tree/",
+                    "name": "tree",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.3, 0, 0],
+                }, {                
+                    "resource": "/models/tree/",
+                    "name": "tree",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.4, 0, 0],
+                }
             ],
         },
     ]
@@ -886,6 +909,10 @@ def save_pdf():
         img_io = io.BytesIO(img_bytes)
 
         pdf.add_page()
+
+        pdf.set_font("Arial", "B", 14)
+        pdf.multi_cell(0, 10, "66666666666666666666666666", align="C")
+        pdf.ln(5)  # 空一行
         pdf.image(img_io, x=10, y=10, w=180)  # 调整位置和宽度
 
     # 将 PDF 写入 BytesIO

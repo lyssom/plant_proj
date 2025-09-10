@@ -10,6 +10,7 @@ import { Html } from "@react-three/drei";
 import * as THREE from 'three';
 import { ChevronRightIcon, MinusIcon } from '@chakra-ui/icons';
 import { getLocationMsg, computePlantsData, saveImage, savePdf } from './api';
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   Box,
@@ -196,6 +197,8 @@ type GardenDrawerProps = {
   handleScreenshot: () => void;
   wallOffset: string
   setWalloffset: React.Dispatch<React.SetStateAction<string>>;
+  svgElement: JSX.Element;
+  setSvgElement: React.Dispatch<React.SetStateAction<JSX.Element>>;
 };
 
 
@@ -267,7 +270,8 @@ export function GardenDrawer({
   spaceNeeded, setSpaceNeeded, spaceRatio, setSpaceRatio,
   plantsData, setPlantsData, PositionDatas, setLoaded,
   handleScreenshot, 
-  wallOffset, setWallOffset
+  wallOffset, setWallOffset, 
+  svgElement, setSvgElement
 
 }: GardenDrawerProps) {
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -275,7 +279,6 @@ export function GardenDrawer({
   const [style, setStyle] = useState("");
   const [viewSeason, setViewSeason] = useState("");
   const [selectedPlants, setSelectedPlants] = useState<string[]>([]);
-  const svgRef = useRef<SVGSVGElement>(null);
 
   const handleClose = () => {
     setStep(0);
@@ -612,7 +615,9 @@ export function GardenDrawer({
               <Button variant="ghost" mr={3} onClick={() => setStep(2)}>
                   上一步
                 </Button>
-              <GardenModal plantsData={plantsData} setPlantsData={setPlantsData} PositionDatas={PositionDatas} cells={cells} setLoaded={setLoaded} svgRef={svgRef}/>
+              <GardenModal 
+              plantsData={plantsData} setPlantsData={setPlantsData} PositionDatas={PositionDatas} 
+              cells={cells} setLoaded={setLoaded} svgElement={svgElement} setSvgElement={setSvgElement}/>
               <Button colorScheme="blue" ml={3} onClick={() => setStep(4)}>
                 下一步
               </Button>
@@ -1180,14 +1185,15 @@ interface Plant {
 // ];
 
 export function GardenModal(
-  {plantsData, setPlantsData, PositionDatas, cells, setLoaded, svgRef}: 
+  {plantsData, setPlantsData, PositionDatas, cells, setLoaded, svgElement,setSvgElement}: 
   {
     plantsData: Plant[], 
-    setPlantsData: React.Dispatch<React.SetStateAction<Plant[]>> , 
+    setPlantsData: React.Dispatch<React.SetStateAction<Plant[]>>, 
     PositionDatas: any[], 
     cells: [number, number], 
-    setLoaded: React.Dispatch<React.SetStateAction<boolean>>
-    svgRef: React.RefObject<SVGSVGElement>
+    setLoaded: React.Dispatch<React.SetStateAction<boolean>>,
+    svgElement: JSX.Element
+    setSvgElement: React.Dispatch<React.SetStateAction<JSX.Element>>,
   }
 ) {
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -1230,6 +1236,71 @@ export function GardenModal(
     onClose()
   }
 
+
+  useEffect(() => {
+    setSvgElement(
+      <svg
+        width={600}
+        height={600}
+        style={{ border: "1px solid #ccc", background: "#fdfdfd" }}
+      >
+        {/* 绘制格子 */}
+        {Array.from({ length: cells[0] }).map((_, i) =>
+          Array.from({ length: cells[1] }).map((_, j) => (
+            <rect
+              key={`${i}-${j}`}
+              x={i * cellSize}
+              y={j * cellSize}
+              width={cellSize}
+              height={cellSize}
+              fill="none"
+              stroke="#ddd"
+            />
+          ))
+        )}
+
+        {/* 绘制植物 */}
+        {plantsData.map((plant, idx) => {
+          const x = plant.position.x * cellSize;
+          const y = plant.position.y * cellSize;
+
+          return (
+            <g key={idx}>
+              {/* 背景格子，只显示分区颜色 */}
+              <rect
+                x={x}
+                y={y}
+                width={cellSize}
+                height={cellSize}
+                fill={plant.color || "#eee"} // 分区颜色
+                opacity={0.3} // 半透明
+              />
+              {/* 圆，显示植物颜色 */}
+              <circle
+                cx={x + cellSize / 2}
+                cy={y + cellSize / 2}
+                r={radius}
+                fill={plant.plant.color}
+                opacity={0.7}
+              />
+              {/* 文字 */}
+              <text
+                x={x + cellSize / 2}
+                y={y + cellSize / 2 + 5}
+                fontSize="12"
+                textAnchor="middle"
+                fill="#000"
+                dominantBaseline="middle"
+              >
+                {plant.plant.name}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    );
+  }, [plantsData]);
+
   return (
     <>
       <Button colorScheme="teal" onClick={handleOpen}>
@@ -1244,65 +1315,7 @@ export function GardenModal(
           <ModalBody>
             <Flex>
               <Box>
-                <svg ref={svgRef}
-                  width={600}
-                  height={600}
-                  style={{ border: "1px solid #ccc", background: "#fdfdfd" }}
-                >
-                  {/* 绘制格子 */}
-                  {Array.from({ length: cells[0] }).map((_, i) =>
-                    Array.from({ length: cells[1] }).map((_, j) => (
-                      <rect
-                        key={`${i}-${j}`}
-                        x={i * cellSize}
-                        y={j * cellSize}
-                        width={cellSize}
-                        height={cellSize}
-                        fill="none"
-                        stroke="#ddd"
-                      />
-                    ))
-                  )}
-
-                  {/* 绘制植物 */}
-                  {plantsData.map((plant, idx) => {
-                    const x = plant.position.x * cellSize;
-                    const y = plant.position.y * cellSize;
-
-                    return (
-                      <g key={idx}>
-                        {/* 背景格子，只显示分区颜色 */}
-                        <rect
-                          x={x}
-                          y={y}
-                          width={cellSize}
-                          height={cellSize}
-                          fill={plant.color || "#eee"} // 分区颜色
-                          opacity={0.3} // 半透明
-                        />
-                        {/* 圆，显示植物颜色 */}
-                        <circle
-                          cx={x + cellSize / 2}
-                          cy={y + cellSize / 2}
-                          r={radius}
-                          fill={plant.plant.color}
-                          opacity={0.7}
-                        />
-                        {/* 文字 */}
-                        <text
-                          x={x + cellSize / 2}
-                          y={y + cellSize / 2 + 5}
-                          fontSize="12"
-                          textAnchor="middle"
-                          fill="#000"
-                          dominantBaseline="middle"
-                        >
-                          {plant.plant.name}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
+                {svgElement}
               </Box>
               {/* 右侧图例 */}
         <Box ml={4}>
@@ -1395,6 +1408,9 @@ export function GardenPage() {
   type WallOffset = "top" | "bottom" | "left" | "right";
   const [wallOffset, setWallOffset] = useState<WallOffset>("top");
 
+  const [svgElement, setSvgElement] = useState<JSX.Element | null>(null);
+
+
   const HALF_X = (cells[0] * CELL_SIZE) / 2;
   const HALF_Y = (cells[1] * CELL_SIZE) / 2;
   const GROUP_OFFSET: [number, number, number] = [
@@ -1405,6 +1421,71 @@ export function GardenPage() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  function svgToPng(svgElement: SVGSVGElement, width = 600, height = 600): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      try {
+
+        console.log("aaaaa")
+        console.log(svgElement)
+
+        const svgrand = renderToStaticMarkup(
+          <svg width={600} height={600} xmlns="http://www.w3.org/2000/svg">
+            {svgElement}
+          </svg>
+        )
+        // 转成 DOM 节点
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(svgrand, "image/svg+xml");
+        const svgNode = doc.documentElement;
+        console.log(svgNode)
+
+        const serializer = new XMLSerializer();
+        const svgString = serializer.serializeToString(svgNode);
+
+        console.log(svgString)
+
+        const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+        const url = URL.createObjectURL(svgBlob);
+
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error("转换失败"));
+            }, "image/png");
+          }
+          URL.revokeObjectURL(url);
+        };
+        img.onerror = (err) => {
+          console.error("SVG 转 PNG 加载失败", err, svgString);
+          reject(new Error("SVG 转 PNG 加载失败"));
+        };
+        img.src = url;
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      resolve(result.split(",")[1]); // 只取 base64 部分
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+
   const handleScreenshot = async () => {
     if (!canvasRef.current) return;
 
@@ -1412,25 +1493,41 @@ export function GardenPage() {
 
     for (const s of SEASONS.map(s => s.value)) {
       setSeason(s);
-      const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+      // const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
       // await sleep(10000);
 
-      // 截图
+      // const dataURL = canvasRef.current.toDataURL("image/png");
+      // const payload = { filename: `${season}.png`, data: dataURL.split(",")[1] };
+      // payloads.push(payload);
+      // 
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+      await sleep(2000);
+
       const dataURL = canvasRef.current.toDataURL("image/png");
-
-      // 上传到后端
-      const payload = { filename: `${season}.png`, data: dataURL.split(",")[1] };
-      // await saveImage(payload);
-
+      const payload = { filename: `${s}.png`, data: dataURL.split(",")[1] };
       payloads.push(payload);
-
-      // // 可选：下载
-      // const link = document.createElement("a");
-      // link.href = dataURL;
-      // link.download = `${season}.png`;
-      // link.click();
     }
 
+
+    const pngBlob = await svgToPng(svgElement, 600, 600);
+    const base64Data = await blobToBase64(pngBlob);
+
+    payloads.push({ filename: `garden.png`, data: base64Data });
+
+
+    const response = await savePdf(payloads);
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "seasons.pdf";
+    link.click();
+  };
+
+
+
+  function buju() {
     const radius = 25;
     const canvas = document.createElement("canvas");
     const cellSize = 50;
@@ -1458,13 +1555,8 @@ export function GardenPage() {
 
     payloads.push({ filename: "garden.png", data: pngDataUrl.split(",")[1] });
     
-    const response = await savePdf(payloads);
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "seasons.pdf";
-    link.click();
-  };
+
+  } 
 
 
   // const handleScreenshot = () => {
@@ -1737,6 +1829,8 @@ export function GardenPage() {
         handleScreenshot = {handleScreenshot}
         wallOffset={wallOffset}
         setWallOffset={setWallOffset}
+        svgElement = {svgElement}
+        setSvgElement={setSvgElement}
         />
       </Box>
     </div>
