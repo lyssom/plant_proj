@@ -117,7 +117,6 @@ function ClickablePlane({
   }
 
   useEffect(() => {
-    // console.log(terrainHeight);
     if (selectedCell) {
       const [x, y] = selectedCell;
       const key = `${x}-${y}`;
@@ -127,10 +126,6 @@ function ClickablePlane({
       }));
     }
   }, [terrainHeight, selectedCell]);
-
-  // console.log(66666666)
-  // console.log(flowerPositions)
-  // console.log(66666666777)
 
   return (
     <group>
@@ -211,7 +206,6 @@ export function LocationSelect() {
 
   useEffect(() => {
     getLocationMsg().then((res) => {
-      console.log(res);
       setProvinceTree(res.data.data);
     });
   }, []);
@@ -282,9 +276,6 @@ export function GardenDrawer({
   const [viewSeason, setViewSeason] = useState("");
   const [selectedPlants, setSelectedPlants] = useState<string[]>([]);
   const svgRef = useRef<SVGSVGElement>(null);
-  // console.log(11111111)
-  // console.log(svgRef.current);
-  // console.log(11111111222)
 
   const handleClose = () => {
     setStep(0);
@@ -301,7 +292,6 @@ export function GardenDrawer({
     );
   };
 
-  // console.log(mode)
   const MODE_MAP: Record<string, string> = {
     normal: "铺装",
     wall: "墙",
@@ -714,19 +704,23 @@ function ObjectGLBModel({
   position,
   upAxis,
   target,
+  latinName,
+  zhName,
+  plant
 }: {
   Reasource: string;
   name: string;
   position: [number, number, number];
   upAxis: string;
   target: [number, number, number];
+  latinName: string;
+  zhName: string;
+  plant: any;
 }) {
   const [obj, setObj] = useState<THREE.Object3D | null>(null);
   const ref = useRef<THREE.Object3D>(null!);
   const [hovered, setHovered] = useState(false);
-
-  // console.log(Reasource)
-  // console.log(name)
+  const hideTimer = useRef<number>();
 
   useEffect(() => {
     const loader = new GLTFLoader();
@@ -744,27 +738,17 @@ function ObjectGLBModel({
       });
 
       // 处理 upAxis
-      if (upAxis === "z") {
-        model.rotation.x = Math.PI / 2;
-      } else if (upAxis === "x") {
-        model.rotation.x = Math.PI / 2;
-      } else if (upAxis === "y") {
-        model.rotation.y = Math.PI / 2;
-      } else if (upAxis === "-z") {
-        model.rotation.x = -Math.PI / 2;
-      } else if (upAxis === "-x") {
-        model.rotation.x = -Math.PI / 2;
-      } else if (upAxis === "-y") {
-        model.rotation.y = -Math.PI / 2;
-      }
+      if (upAxis === "z" || upAxis === "x") model.rotation.x = Math.PI / 2;
+      else if (upAxis === "y") model.rotation.y = Math.PI / 2;
+      else if (upAxis === "-z" || upAxis === "-x") model.rotation.x = -Math.PI / 2;
+      else if (upAxis === "-y") model.rotation.y = -Math.PI / 2;
 
       const box = new THREE.Box3().setFromObject(model);
-      // const height = box.max.y - box.min.y;
-      model.position.y -= box.min.y; // 把底部贴到 y=0
+      model.position.y -= box.min.y; // 底部贴到 y=0
 
       setObj(model);
     });
-  }, []);
+  }, [Reasource, name, upAxis]);
 
   useFrame(() => {
     if (ref.current) {
@@ -774,42 +758,59 @@ function ObjectGLBModel({
     }
   });
 
+  const handleMoreInfo = (plant: any) => {
+    alert(`
+名称: ${plant.name}
+拉丁名: ${plant.latin_name}
+科: ${plant.family}
+属: ${plant.genus}
+颜色: ${plant.color}
+    `);
+  };
+
+  const handlePointerOver = (e: any) => {
+    e.stopPropagation();
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    setHovered(true);
+  };
+
+  const handlePointerOut = (e: any) => {
+    e.stopPropagation();
+    hideTimer.current = window.setTimeout(() => setHovered(false), 400); // 延时300ms隐藏
+  };
+
   if (!obj) return null;
 
   return (
-  <group
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        setHovered(true);
-      }}
-      onPointerOut={(e) => {
-        e.stopPropagation();
-        setHovered(false);
-      }}
-    >
-    <primitive ref={ref} object={obj} position={position} scale={[1, 1, 1]} />
-    {hovered && (
+    <group onPointerOver={handlePointerOver} onPointerOut={handlePointerOut}>
+      <primitive ref={ref} object={obj} position={position} scale={[1, 1, 1]} />
+      {hovered && (
         <Html distanceFactor={10}>
           <Tooltip
             isOpen
             label={
               <div>
-                <p><b>名称：</b>乔木</p>
-                <p><b>高度：</b>约 5 米</p>
-                <p><b>类型：</b>常绿树</p>
-                <p><b>说明：</b>适合园林景观，美化环境，提供遮荫。</p>
+                <p><b>名称：</b>{zhName}</p>
+                <p><b>拉丁名：</b>{latinName}</p>
+                <Button
+                  size="xs"
+                  mt={2}
+                  onClick={() => handleMoreInfo(plant)}
+                >
+                  获取更多信息
+                </Button>
               </div>
             }
             placement="top"
             hasArrow
-            bg="white"         // 背景白色
-            color="gray.800"   // 字体深灰
-            p={3}              // 内边距
-            borderRadius="md"  // 圆角
-            boxShadow="lg"     // 柔和阴影
-            arrowShadowColor="rgba(0,0,0,0.15)" // 箭头阴影
+            bg="white"
+            color="gray.800"
+            p={3}
+            borderRadius="md"
+            boxShadow="lg"
+            arrowShadowColor="rgba(0,0,0,0.15)"
           >
-            <span style={{ width: 1, height: 1 }} /> {/* Tooltip 需要一个触发器 */}
+            <span style={{ width: 1, height: 1 }} />
           </Tooltip>
         </Html>
       )}
@@ -1107,9 +1108,6 @@ export function WallTile({ position, rotation }: WallTileProps) {
     return tex;
   }, []);
 
-  // console.log(222)
-
-  // console.log(position);
   return (
     <mesh position={position} rotation={rotation} castShadow receiveShadow>
       <boxGeometry args={[1, 1, 0.2]} />
@@ -1136,8 +1134,6 @@ function DirectionalSun({ latitude, longitude, date }) {
     if (!lightRef.current) return;
 
     const pos = SunCalc.getPosition(date, latitude, longitude);
-    // console.log(date);
-    // console.log(latitude, longitude);
     const alt = pos.altitude;
     const az = pos.azimuth;
     const r = 50;
@@ -1199,19 +1195,12 @@ export function GardenModal(
 
   const cellSize = 60; // 每个格子大小
   const radius = 25; // 圆的半径
-  console.log(661111111111);
-  console.log(svgRef);
-  console.log(666111111111122);
-
 
   const handleOpen = async () => {
     try {
       // const data = {}
       const res = await computePlantsData(PositionDatas);
-      // console.log(res);
-      // console.log(res.data);
       setPlantsData(res.data.data);
-      // console.log("更新后的 modelConfig:", res.data.data);
     } catch (err) {
       console.error("计算出错:", err);
     }
@@ -1420,13 +1409,9 @@ export function GardenPage() {
     if (!canvasRef.current) return;
 
     const payloads = [];
-    // console.log(222222229933)
 
     for (const s of SEASONS.map(s => s.value)) {
       setSeason(s);
-      console.log(season);
-
-      // 等画布渲染和模型加载
       const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
       // await sleep(10000);
 
@@ -1473,7 +1458,6 @@ export function GardenPage() {
 
     payloads.push({ filename: "garden.png", data: pngDataUrl.split(",")[1] });
     
-    console.log(2222222299)
     const response = await savePdf(payloads);
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement("a");
@@ -1494,7 +1478,6 @@ export function GardenPage() {
 
 
   const handleCellClick = (x: number, y: number) => {
-    console.log("ccccccccc")
     if (mode === "normal") {
       setObjectPositions(prev => [...prev, {x, y}]);
     } else if (mode === "water") {
@@ -1576,28 +1559,6 @@ export function GardenPage() {
   }, [isPlaying]);
 
 
-
-  // const toggleModel = (key: string) => {
-  //   setActiveModels((prev) =>
-  //     prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
-  //   );
-  // };
-
-  // const toggleRender = () => {
-  //   if (renderModels == false) {
-  //     const data = {}
-  //     getModelConfig(data).then((res) => {
-  //       console.log(res);
-  //       console.log(res.data);
-  //       setModelConfig(res.data.data);
-  //       console.log(modelConfig)
-  //     })
-  //   }
-
-  //   setRenderModels(!renderModels)
-  // };
-
-
   useEffect(() => {
     const totalPositions: {x: number; y: number}[] = [];
     for (let x = 0; x < cells[0]; x++) {
@@ -1617,9 +1578,6 @@ export function GardenPage() {
       pos => !occupied.has(`${pos.x}-${pos.y}`)
     );
 
-    // 随机挑选 70%
-    // console.log(spaceRatio)
-    // flowerRatio = (100-spaceRatio)/100
     const targetCount = Math.floor(available.length * (100-spaceRatio)/100);
     const shuffled = [...available].sort(() => Math.random() - 0.5);
     const selected = shuffled.slice(0, targetCount);
@@ -1629,15 +1587,8 @@ export function GardenPage() {
     }
 
     // setFlowerPositions(selected);
-    // console.log(1111111)
-    // console.log(flowerPositions)
-    // console.log(111111122)
   }, [cells, spaceRatio, spaceNeeded]);
 
-  // console.log(11199)
-
-  // console.log(flowerPositions)
-  // console.log(111998888)
 
   const PositionDatas = {
     "flowerPositions":flowerPositions,
@@ -1648,9 +1599,6 @@ export function GardenPage() {
     "objectPositions": objectPositions
   }
 
-  // console.log(PositionDatas)
-
-  // console.log(plantsData)
   const rows = cells[0];
   const cols = cells[1];
 
@@ -1659,7 +1607,6 @@ export function GardenPage() {
 
 
 
- console.log(offsetX,offsetY)
 
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
@@ -1686,53 +1633,36 @@ export function GardenPage() {
         />
         <ClickablePlane onClick={handleCellClick} cells={cells} mode={mode} terrainHeight={terrainHeight} flowerPositions={flowerPositions} setWallPositions={setWallPositions}/>
 
-
-        {/* {modelConfig
-          .filter((cfg) => cfg.season === season)
-          .map((cfg) =>
-            objectPositions.map(([x, y], i) => (
-              <group key={`${cfg.keyPrefix}-group-${i}`}>
-                {cfg.models.map((m, j) => (
-                  <ObjectGLBModel
-                    key={`${cfg.keyPrefix}-${j}-${i}`}
-                    Reasource={m.resource}
-                    name={m.name}
-                    position={[
-                      x * CELL_SIZE + (m.offset?.[0] ?? 0),
-                      (m.offset?.[1] ?? 0),
-                      y * CELL_SIZE + (m.offset?.[2] ?? 0),
-                    ]}
-                    upAxis={m.upAxis}
-                    target={[m.target, m.target, m.target]}
-                  />
-                ))}
-              </group>
-            ))
-          )} */}
-
-          {loaded &&
-          plantsData.map((plantCfg, i) =>
-            plantCfg.models
-              .filter((seasonCfg) => seasonCfg.season === season)
-              .map((seasonCfg, si) => (
-                <group key={`${plantCfg.plant.id}-group-${i}-${si}`}>
-                  {seasonCfg.models.map((m, j) => (
-                    <ObjectGLBModel
-                      key={`${seasonCfg.keyPrefix}-${j}-${i}`}
-                      Reasource={m.resource}
-                      name={m.name}
-                      position={[
-                        plantCfg.position.x * CELL_SIZE + (m.offset?.[0] ?? 0),
-                        (m.offset?.[1] ?? 0),
-                        plantCfg.position.y * CELL_SIZE + (m.offset?.[2] ?? 0),
-                      ]}
-                      upAxis={m.upAxis}
-                      target={[m.target, m.target, m.target]}
-                    />
+        {loaded &&
+          plantsData.map((plantCfg, i) => {
+            const latinName = plantCfg.plant?.latin_name ?? ""; // 获取 latin_name
+            return (
+              <group key={`group-${i}`}>
+                {plantCfg.models
+                  .filter((seasonCfg) => seasonCfg.season === season)
+                  .map((seasonCfg, si) => (
+                    <group key={`${plantCfg.plant.id}-group-${i}-${si}`}>
+                      {seasonCfg.models.map((m, j) => (
+                        <ObjectGLBModel
+                          key={`${seasonCfg.keyPrefix}-${j}-${i}`}
+                          Reasource={m.resource}
+                          name={m.name}
+                          latinName={latinName} // 传入 latin_name
+                          zhName={plantCfg.plant.name}
+                          position={[
+                            plantCfg.position.x * CELL_SIZE + (m.offset?.[0] ?? 0),
+                            (m.offset?.[1] ?? 0),
+                            plantCfg.position.y * CELL_SIZE + (m.offset?.[2] ?? 0),
+                          ]}
+                          upAxis={m.upAxis}
+                          target={[m.target, m.target, m.target]}
+                        />
+                      ))}
+                    </group>
                   ))}
-                </group>
-              ))
-          )}
+              </group>
+            );
+          })}
 
           
 

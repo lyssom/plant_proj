@@ -266,7 +266,6 @@ def partition(data):
         "全日照干": {"sunlight": ["高"], "water_need": ["低"]},
         "全日照湿": {"sunlight": ["低"], "water_need": ["高"]},
     }
-
     # 内存分组
     plants_by_zone = {z: [] for z in zone_query_map}
 
@@ -375,6 +374,183 @@ def partition(data):
 
 
     # return json.dumps(result, ensure_ascii=False, indent=2)
+    return final_result
+
+
+def partition(data):
+    import random
+
+    # 颜色映射（可以再扩展6类颜色）
+    color_map = {
+        "全阴干": "#6BAF92",
+        "全阴湿": "#A88ED0",
+        "半日照干": "#F3A6B0",
+        "半日照湿": "#E58B4A",
+        "全日照干": "#FFD166",
+        "全日照湿": "#118AB2",
+    }
+
+    def get_neighbors(x, y, radius=1):
+        coords = []
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                if dx == 0 and dy == 0:
+                    continue
+                coords.append((x + dx, y + dy))
+        return coords
+
+    # 阴影格子
+    shade_set = set()
+    half_shade_set = set()
+    for b in data["buildingPositions"]:
+        shade_set.add((b["x"], b["y"]))  # 完全遮挡
+        half_shade_set.update(get_neighbors(b["x"], b["y"], radius=1))
+    for w in data["wallPositions"]:
+        shade_set.add((w["x"], w["y"]))  # 完全遮挡
+        half_shade_set.update(get_neighbors(w["x"], w["y"], radius=1))
+
+    # 湿地区格子
+    wet_set = set()
+    for water in data["waterPositions"]:
+        wet_set.update(get_neighbors(water["x"], water["y"], radius=1))
+
+    # 区域分类
+    flower_zones = []
+    for f in data["flowerPositions"]:
+        pos = (f["x"], f["y"])
+        is_wet = pos in wet_set
+
+        # 判定光照类型
+        if pos in shade_set:
+            light = "全阴"
+        elif pos in half_shade_set:
+            light = "半日照"
+        else:
+            light = "全日照"
+
+        # 湿度类型
+        wet_str = "湿" if is_wet else "干"
+
+        zone_type = f"{light}{wet_str}"
+
+        flower_zones.append({
+            "position": {"x": f["x"], "y": f["y"]},
+            "type": zone_type,
+            "color": color_map.get(zone_type, "#FFFFFF")
+        })
+
+    # 植物分组
+    all_plants = Plants.query.all()
+    zone_query_map = {
+        "全阴干": {"sunlight": ["低"], "water_need": ["低"]},
+        "全阴湿": {"sunlight": ["低"], "water_need": ["高"]},
+        "半日照干": {"sunlight": ["中"], "water_need": ["低"]},
+        "半日照湿": {"sunlight": ["中"], "water_need": ["高"]},
+        "全日照干": {"sunlight": ["高"], "water_need": ["低"]},
+        "全日照湿": {"sunlight": ["高"], "water_need": ["高"]},
+    }
+
+    plants_by_zone = {z: [] for z in zone_query_map}
+    for plant in all_plants:
+        for zone_type, q in zone_query_map.items():
+            if (plant.sunlight in q["sunlight"]) and (plant.water_need in q["water_need"]):
+                plants_by_zone[zone_type].append(plant)
+
+    # 最终结果
+    final_result = []
+    for f in flower_zones:
+        zone_type = f["type"]
+        candidates = plants_by_zone.get(zone_type, [])
+        if candidates:
+            plant = random.choice(candidates)
+            f["plant"] = {
+                "id": plant.id,
+                "name": plant.name,
+                "latin_name": plant.latin_name,
+                "family": plant.family,
+                "genus": plant.genus,
+                "color": "#6BAF92"
+            }
+            f['models'] = [
+        {
+            "season": 0,
+            "keyPrefix": "mint1",
+            "models": [
+                {
+                    "resource": "/models/mint/",
+                    "name": "mint_1",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.1, 0, 0],
+                },
+                {
+                    "resource": "/models/mint/",
+                    "name": "mint_2",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [0.2, 0, 0],
+                },
+            ],
+        },
+        {
+            "season": 1,
+            "keyPrefix": "mint1",
+            "models": [
+                {
+                    "resource": "/models/mint/",
+                    "name": "mint_2",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.2, 0, 0],
+                },
+            ],
+        },
+        {
+            "season": 2,
+            "keyPrefix": "mint3",
+            "models": [
+                {
+                    "resource": "/models/mint/",
+                    "name": "mint_3",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.3, 0, 0],
+                },
+                {
+                    "resource": "/models/mint/",
+                    "name": "mint_1",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [0.4, 0, 0],
+                },
+            ],
+        },
+        {
+            "season": 3,
+            "keyPrefix": "mint4",
+            "models": [
+                {
+                    "resource": "/models/mint/",
+                    "name": "mint_4",
+                    "upAxis": "y",
+                    "target": 1,
+                    "offset": [-0.5, 0, 0],
+                },
+            ],
+        },
+    ]
+        else:
+            f["plant"] ={
+                "id": "",
+                "name":"",
+                "latin_name": "",
+                "family": "",
+                "genus": "",
+                "color": ""
+            }
+        final_result.append(f)
+
+
     return final_result
 
 
