@@ -812,43 +812,62 @@ const PlantModal: React.FC<PlantModalProps> = ({ isOpen, onClose, plantName }) =
       fetchPlantDetails();
     }
   }, [isOpen]);
-  console.log(isOpen)
 
-const fetchPlantDetails = async () => {
-  try {
-    const response = await getPlantDetail(plantName);
-    setPlantDetails(response.data.data);
-  } catch (err) {
-    console.log(err);
-  }
-};
+  const fetchPlantDetails = async () => {
+    try {
+      setPlantDetails(""); // 每次打开先清空
+      const response = await getPlantDetail(plantName);
+      setPlantDetails(response.data.data);
+    } catch (err) {
+      console.log(err);
+      setPlantDetails("获取植物信息失败，请稍后再试。");
+    }
+  };
 
   if (!isOpen) return null;
 
   return (
     <Html>
       <Box
-        p={4}
+        p={5}
         bg="white"
-        borderRadius="md"
-        boxShadow="xl"
-        minW="200px"
-        maxW="300px"
+        borderRadius="2xl"
+        border="2px solid"
+        borderColor="green.400"
+        boxShadow="lg"
+        minW="800px"
+        maxW="800px"
+        maxH="400px"         // 限制最大高度
+        overflowY="auto"     // 内容超过时出现滚动条
         textAlign="left"
+        position="relative"
       >
-        <Stack spacing={2}>
-          <Button size="xs" alignSelf="flex-end" onClick={onClose}>
+        <Stack spacing={3}>
+          <Button
+            size="xs"
+            alignSelf="flex-end"
+            onClick={onClose}
+            variant="outline"
+            colorScheme="green"
+            borderRadius="full"
+          >
             关闭
           </Button>
 
-          <Text>{plantDetails}</Text>
+          <Text fontSize="lg" fontWeight="bold" color="green.600">
+            {plantName}
+          </Text>
+
+          <Text fontSize="sm" color="gray.600" whiteSpace="pre-wrap">
+            {plantDetails || "🌱 智能生成植物详细信息中…"}
+          </Text>
         </Stack>
       </Box>
+
     </Html>
   );
 };
 
-export default PlantModal;
 
 function ObjectGLBModel({
   Reasource,

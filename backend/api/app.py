@@ -1105,26 +1105,38 @@ def save_pdf():
     )
 
 
+plant_cache = {}
 
-def query_deepseek(name):
-    client = OpenAI(api_key="sk-48811da9f30a46c8a40fa6bbc95318c9", base_url="https://api.deepseek.com")
+def query_deepseek(name: str):
+    if name in plant_cache:
+        print(f"缓存命中: {name}")
+        return plant_cache[name]
 
-    print(name)
-
-    response = client.chat.completions.create(
-        model="deepseek-chat",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": f'你是一个植物专家，给出{name}的信息'},
-        ],
-        stream=False
+    client = OpenAI(
+        api_key="sk-48811da9f30a46c8a40fa6bbc95318c9", 
+        base_url="https://api.deepseek.com"
     )
 
-    if response.status_code == 200:
-        result = response.json()
-        print(result['choices'][0]['message']['content'])
-    else:
-        print("请求失败，错误码：", response.status_code)
+    print(f"请求 DeepSeek: {name}")
+
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "你是一个植物专家"},
+                {"role": "user", "content": f"给出{name}的详细信息，包括基本特征、生长习性、常见病害、修剪建议、防治方法。"},
+            ],
+            stream=False
+        )
+        answer = response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"DeepSeek API 调用失败: {e}")
+        answer = "植物信息获取失败，请稍后再试。"
+
+    # 写入缓存
+    plant_cache[name] = answer
+    return answer
+
 
 
 
@@ -1132,9 +1144,9 @@ def query_deepseek(name):
 @app.get("/api/get_plant_detail")
 def get_plant_detail():
     name = request.args.get("name")
-    query_deepseek(name)
+    answer = query_deepseek(name)
     result = f"这是一个植物，{name}"
-    return ok(result)
+    return ok(answer)
 
 
 
