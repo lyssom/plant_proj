@@ -149,3 +149,13 @@ export const savePdf = (data: any) => {
     })
 }
 
+
+
+
+export const getPlantDetail = (name: string) => {
+    return axios.request({
+        url: '/api/get_plant_detail',
+        method: 'get',
+        params: { name }
+    })
+}

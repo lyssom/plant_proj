@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useRef, useState, useEffect, useMemo } from 'react';
+import { useRef, useState, useEffect, useMemo, use } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
@@ -9,7 +9,7 @@ import SunCalc from "suncalc";
 import { Html } from "@react-three/drei";
 import * as THREE from 'three';
 import { ChevronRightIcon, MinusIcon } from '@chakra-ui/icons';
-import { getLocationMsg, computePlantsData, saveImage, savePdf } from './api';
+import { getLocationMsg, computePlantsData, getPlants, savePdf, getPlantDetail } from './api';
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
@@ -48,7 +48,16 @@ import {
   ModalCloseButton,
   ModalBody,
   ModalFooter,
-  Flex} from "@chakra-ui/react";
+  Table,
+  Thead,
+  Flex,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Divider
+} from "@chakra-ui/react";
+
 
 
 const CELL_SIZE = 1;     
@@ -199,12 +208,22 @@ type GardenDrawerProps = {
   setWalloffset: React.Dispatch<React.SetStateAction<string>>;
   svgElement: JSX.Element;
   setSvgElement: React.Dispatch<React.SetStateAction<JSX.Element>>;
+  setLatitude: React.Dispatch<React.SetStateAction<number>>;
+  setLongitude: React.Dispatch<React.SetStateAction<number>>;
+  province: string, setProvince: React.Dispatch<React.SetStateAction<string>>, city: string, setCity: React.Dispatch<React.SetStateAction<string>>
+  style: string;
+  setStyle: React.Dispatch<React.SetStateAction<string>>;
+  viewSeason: string;
+  setViewSeason: React.Dispatch<React.SetStateAction<string>>;
+  selectedPlants: [];
+  setSelectedPlants: React.Dispatch<React.SetStateAction<[]>>;
 };
 
 
-export function LocationSelect() {
-  const [province, setProvince] = useState("");
-  const [city, setCity] = useState("");
+export function LocationSelect({province, setProvince, city, setCity, setLatitude, setLongitude}: {
+  province: string, setProvince: React.Dispatch<React.SetStateAction<string>>, city: string, setCity: React.Dispatch<React.SetStateAction<string>>,
+  setLatitude: React.Dispatch<React.SetStateAction<number>>, setLongitude: React.Dispatch<React.SetStateAction<number>>
+}) {
   const [provinceTree, setProvinceTree] = useState([]);
 
   useEffect(() => {
@@ -213,8 +232,19 @@ export function LocationSelect() {
     });
   }, []);
 
-  const currentCities =
-    provinceTree.find((p) => p.province === province)?.cities || [];
+
+
+  useEffect(() => {
+
+    const selectedCity = currentCities.find((c) => c.city === city) || [];
+    setLatitude(selectedCity.lat);
+    setLongitude(selectedCity.lng);
+  }, [city]);
+
+  const currentCities = provinceTree.find((p) => p.province === province)?.cities || [];
+
+
+    
 
 return (
     <FormControl mb={6}>
@@ -253,17 +283,6 @@ return (
 }
 
 
-const options = [
-  { label: "无明确风格", value: "none" },
-  { label: "观赏草甸", value: "meadow" },
-  { label: "昆虫友好花园", value: "insectFriendly" },
-  { label: "雨水花园", value: "rainGarden" },
-  { label: "儿童花园", value: "children" },
-  { label: "疗愈花园", value: "healing" },
-  { label: "岩石花园", value: "rock" },
-  { label: "可食花园", value: "edible" },
-];
-
 export function GardenDrawer({ 
   cells, setCells, mode, setMode, treeHeight, setTreeHeight, 
   treeWidth, setTreeWidth, terrainHeight, setTerrainHeight,
@@ -271,19 +290,28 @@ export function GardenDrawer({
   plantsData, setPlantsData, PositionDatas, setLoaded,
   handleScreenshot, 
   wallOffset, setWallOffset, 
-  svgElement, setSvgElement
-
+  svgElement, setSvgElement,
+  setLatitude,setLongitude,
+  province, setProvince, city, setCity,
+  style, setStyle, viewSeason, setViewSeason, selectedPlants, setSelectedPlants
 }: GardenDrawerProps) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [step, setStep] = useState(0);
-  const [style, setStyle] = useState("");
-  const [viewSeason, setViewSeason] = useState("");
-  const [selectedPlants, setSelectedPlants] = useState<string[]>([]);
+  const [plantNames, setPlantNames] = useState([]);
+  const [plantList, setPlantList] = useState<{name: string; count: number}[]>([]);
+
 
   const handleClose = () => {
     setStep(0);
     onClose();
   };
+
+   useEffect(() => {
+     getPlants().then((res) => {
+      // const plantMsg = res.data.data.map((p: any) => ({name: p.name}));
+      setPlantNames(res.data.data.map((p: any) => ({name: p.name})))
+     });
+   }, []);
 
   
 
@@ -303,6 +331,31 @@ export function GardenDrawer({
     tree: "乔木",
     terrain: "地形",
   };
+
+
+  // const plantList = [
+  //   { name: "芒草", count: 3 },
+  //   { name: "菊花", count: 5 },
+  //   { name: "月季", count: 2 },
+  // ];
+
+
+
+  useEffect(() => {
+    const list = Object.values(
+      plantsData.reduce((acc, item) => {
+        const name = item.plant.name;
+
+        if (!acc[name]) {
+          acc[name] = { name, count: 0 };
+        }
+        acc[name].count += 1;
+        return acc;
+      }, {} as Record<string, { name: string; count: number }>)
+    );
+    setPlantList(list);
+  }, [plantsData]);
+
   return (
     <>
       <Button onClick={onOpen}>设置花园</Button>
@@ -327,7 +380,7 @@ export function GardenDrawer({
             </Text>
 
             <FormControl mb={6}>
-              <LocationSelect />
+              <LocationSelect province={province} setProvince={setProvince} city={city} setCity={setCity} setLatitude={setLatitude} setLongitude={setLongitude}/>
             </FormControl>
 
             <FormControl mb={6}>
@@ -517,16 +570,23 @@ export function GardenDrawer({
 
             )}
 
-            {step === 3 && (
-              <FormControl>
-                <FormLabel>花园的风格</FormLabel>
+        {step === 3 && (
+          <FormControl>
+            <Stack spacing={6} divider={<Divider />}> 
+              
+              {/* 花园风格 */}
+              <Box>
+                <FormLabel fontSize="lg" fontWeight="bold" mb={2}>
+                  花园的风格
+                </FormLabel>
                 <Select
                   placeholder="请选择花园风格"
                   value={style}
                   onChange={(e) => setStyle(e.target.value)}
+                  width="100%"
                 >
                   <option value="none">无明确风格</option>
-                  <option value="meadow">观赏草甸</option>
+                  <option value="meadow">混合草甸</option>
                   <option value="insectFriendly">昆虫友好花园</option>
                   <option value="rainGarden">雨水花园</option>
                   <option value="children">儿童花园</option>
@@ -534,48 +594,83 @@ export function GardenDrawer({
                   <option value="rock">岩石花园</option>
                   <option value="edible">可食花园</option>
                 </Select>
+              </Box>
 
-              <FormLabel>花园的风格</FormLabel>
-              <Menu closeOnSelect={false}>
-                <MenuButton as={Button}>
-                  {selectedPlants.length > 0
-                    ? selectedPlants.map((v) => options.find((o) => o.value === v)?.label).join(", ")
-                    : "请选择花园风格"}
-                </MenuButton>
-                <MenuList>
-                  <Stack spacing={1} p={2}>
-                    {options.map((option) => (
-                      <Checkbox
-                        key={option.value}
-                        isChecked={selectedPlants.includes(option.value)}
-                        onChange={() => toggleStyle(option.value)}
-                      >
-                        {option.label}
-                      </Checkbox>
-                    ))}
-                  </Stack>
-                </MenuList>
-              </Menu>
+              {/* 植物偏好 */}
+              <Box>
+                <FormLabel fontSize="lg" fontWeight="bold" mb={2}>
+                  花园的植物偏好
+                </FormLabel>
+                <Menu closeOnSelect={false}>
+                  <MenuButton as={Button} w="100%" textAlign="left" whiteSpace="normal"  wordBreak="break-word" 
+                  h="auto" minH="40px" py={2}>
+                    {selectedPlants.length > 0
+                      ? selectedPlants.map((v) => plantNames.find((o) => o.name === v)?.name).join(", ")
+                      : "请选择植物"}
+                  </MenuButton>
+                  <MenuList maxH="200px" overflowY="auto">
+                    <Box p={2} border="1px solid" borderColor="gray.200" rounded="md">
+                      <Stack spacing={2}>
+                        {plantNames.map((option) => (
+                          <Checkbox
+                            key={option.name}
+                            isChecked={selectedPlants.includes(option.name)}
+                            onChange={() => toggleStyle(option.name)}
+                          >
+                            {option.name}
+                          </Checkbox>
+                        ))}
+                      </Stack>
+                    </Box>
+                  </MenuList>
+                </Menu>
+              </Box>
 
-              <FormLabel>花园的主要观赏季节</FormLabel>
+              {/* 主要观赏季节 */}
+              <Box>
+                <FormLabel fontSize="lg" fontWeight="bold" mb={2}>
+                  花园的主要观赏季节
+                </FormLabel>
                 <Select
                   placeholder="请选择花园的主要观赏季节"
                   value={viewSeason}
                   onChange={(e) => setViewSeason(e.target.value)}
+                  width="100%"
                 >
                   <option value="none">无</option>
                   <option value="spring">春</option>
                   <option value="summer">夏</option>
-                  <option value="automn">秋</option>
+                  <option value="autumn">秋</option>
                   <option value="winter">冬</option>
                 </Select>
-            </FormControl>
+              </Box>
 
-            )}
+            </Stack>
+          </FormControl>
+        )}
+
 
             {step === 4 && (
               <FormControl>
-                <Button onClick={() => handleScreenshot()}>导出</Button><br />
+                <Box mt={4}>
+                  <Text fontWeight="bold" mb={2}>种植清单</Text>
+                  <Table size="sm" variant="simple">
+                    <Thead>
+                      <Tr>
+                        <Th>植物名称</Th>
+                        <Th>数量</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {plantList.map((plant, idx) => (
+                        <Tr key={idx}>
+                          <Td>{plant.name}</Td>
+                          <Td>{plant.count}</Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </Box>
                 <Button>购买植物</Button>
             </FormControl>
 
@@ -628,6 +723,7 @@ export function GardenDrawer({
                 <Button variant="ghost" mr={3} onClick={() => setStep(3)}>
                   上一步
                 </Button>
+                <Button mr={3} onClick={() => handleScreenshot(plantList)}>导出</Button><br />
                 <Button colorScheme="blue" onClick={() => onClose()}>
                   完成
                 </Button>
@@ -702,6 +798,57 @@ export function GardenDrawer({
 // }
 
 
+interface PlantModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  plantName: string;
+}
+
+const PlantModal: React.FC<PlantModalProps> = ({ isOpen, onClose, plantName }) => {
+  const [plantDetails, setPlantDetails] = useState<string>("");
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchPlantDetails();
+    }
+  }, [isOpen]);
+  console.log(isOpen)
+
+const fetchPlantDetails = async () => {
+  try {
+    const response = await getPlantDetail(plantName);
+    setPlantDetails(response.data.data);
+  } catch (err) {
+    console.log(err);
+  }
+};
+
+  if (!isOpen) return null;
+
+  return (
+    <Html>
+      <Box
+        p={4}
+        bg="white"
+        borderRadius="md"
+        boxShadow="xl"
+        minW="200px"
+        maxW="300px"
+        textAlign="left"
+      >
+        <Stack spacing={2}>
+          <Button size="xs" alignSelf="flex-end" onClick={onClose}>
+            关闭
+          </Button>
+
+          <Text>{plantDetails}</Text>
+        </Stack>
+      </Box>
+    </Html>
+  );
+};
+
+export default PlantModal;
 
 function ObjectGLBModel({
   Reasource,
@@ -725,7 +872,11 @@ function ObjectGLBModel({
   const [obj, setObj] = useState<THREE.Object3D | null>(null);
   const ref = useRef<THREE.Object3D>(null!);
   const [hovered, setHovered] = useState(false);
+  const [tooltipVisible, setTooltipVisible] = useState(false);
   const hideTimer = useRef<number>();
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [modelSize, setModelSize] = useState<THREE.Vector3>(new THREE.Vector3(1, 1, 1));
+  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     const loader = new GLTFLoader();
@@ -750,6 +901,11 @@ function ObjectGLBModel({
 
       const box = new THREE.Box3().setFromObject(model);
       model.position.y -= box.min.y; // 底部贴到 y=0
+      
+      // 获取模型尺寸用于定位悬浮框
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      setModelSize(size);
 
       setObj(model);
     });
@@ -763,25 +919,45 @@ function ObjectGLBModel({
     }
   });
 
-  const handleMoreInfo = (plant: any) => {
-    alert(`
-名称: ${plant.name}
-拉丁名: ${plant.latin_name}
-科: ${plant.family}
-属: ${plant.genus}
-颜色: ${plant.color}
-    `);
+  const handleMoreInfo = (plant: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    console.log(66666666666666);
+    setModalOpen(true);
+//     alert(`
+// 名称: ${plant.name}
+// 拉丁名: ${plant.latin_name}
+// 科: ${plant.family}
+// 属: ${plant.genus}
+// 颜色: ${plant.color}
+//     `);
+  };
+
+  const handleCloseModal = () => {
+    setModalOpen(false);
   };
 
   const handlePointerOver = (e: any) => {
     e.stopPropagation();
     if (hideTimer.current) clearTimeout(hideTimer.current);
     setHovered(true);
+    setTooltipVisible(true);
   };
 
   const handlePointerOut = (e: any) => {
     e.stopPropagation();
-    hideTimer.current = window.setTimeout(() => setHovered(false), 400); // 延时300ms隐藏
+    // 只有当鼠标离开整个group时才隐藏
+    if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) {
+      hideTimer.current = window.setTimeout(() => {
+        setHovered(false);
+        setTooltipVisible(false);
+      }, 400);
+    }
+  };
+
+  const handleTooltipClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // 阻止tooltip点击事件触发pointerout
+    if (hideTimer.current) clearTimeout(hideTimer.current);
   };
 
   if (!obj) return null;
@@ -790,35 +966,88 @@ function ObjectGLBModel({
     <group onPointerOver={handlePointerOver} onPointerOut={handlePointerOut}>
       <primitive ref={ref} object={obj} position={position} scale={[1, 1, 1]} />
       {hovered && (
-        <Html distanceFactor={10}>
-          <Tooltip
-            isOpen
-            label={
-              <div>
-                <p><b>名称：</b>{zhName}</p>
-                <p><b>拉丁名：</b>{latinName}</p>
-                <Button
-                  size="xs"
-                  mt={2}
-                  onClick={() => handleMoreInfo(plant)}
-                >
-                  获取更多信息
-                </Button>
-              </div>
-            }
-            placement="top"
-            hasArrow
-            bg="white"
-            color="gray.800"
-            p={3}
-            borderRadius="md"
-            boxShadow="lg"
-            arrowShadowColor="rgba(0,0,0,0.15)"
+        <Html
+          distanceFactor={10}
+          style={{ 
+            pointerEvents: 'auto',
+            transform: 'translate(-50%, -100%)', // 居中并上移
+            marginTop: '-10px' // 额外上移一些
+          }}
+          position={[position[0], position[1] + modelSize.y / 2 + 0.5, position[2]]} // 在模型上方
+          onClick={handleTooltipClick}
+          ref={tooltipRef}
+        >
+          <div
+            style={{
+              background: 'white',
+              color: '#2D3748',
+              padding: '16px',
+              borderRadius: '8px',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+              pointerEvents: 'auto',
+              zIndex: 1000,
+              minWidth: '220px',
+              border: '1px solid #E2E8F0',
+              fontFamily: 'system-ui, sans-serif'
+            }}
           >
-            <span style={{ width: 1, height: 1 }} />
-          </Tooltip>
+            <p style={{ margin: '0 0 8px 0', fontSize: '14px', lineHeight: '1.4' }}>
+              <b style={{ color: '#2D3748' }}>名称：</b>
+              <span style={{ color: '#4A5568' }}>{zhName}</span>
+            </p>
+            <p style={{ margin: '0 0 12px 0', fontSize: '14px', lineHeight: '1.4' }}>
+              <b style={{ color: '#2D3748' }}>拉丁名：</b>
+              <span style={{ color: '#4A5568', fontStyle: 'italic' }}>{latinName}</span>
+            </p>
+            <button
+              style={{
+                fontSize: '12px',
+                marginTop: '8px',
+                padding: '8px 16px',
+                backgroundColor: '#3182CE',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: '500',
+                width: '100%',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseOver={(e) => e.stopPropagation()}
+              onClick={(e) => handleMoreInfo(plant, e)}
+              onMouseEnter={() => {
+                if (hideTimer.current) clearTimeout(hideTimer.current);
+              }}
+              onMouseLeave={() => {
+                hideTimer.current = window.setTimeout(() => {
+                  setHovered(false);
+                  setTooltipVisible(false);
+                }, 400);
+              }}
+            >
+              获取更多信息
+            </button>
+            
+            {/* 小箭头指示器 */}
+            <div style={{
+              position: 'absolute',
+              bottom: '-8px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '0',
+              height: '0',
+              borderLeft: '8px solid transparent',
+              borderRight: '8px solid transparent',
+              borderTop: '8px solid white'
+            }} />
+          </div>
         </Html>
       )}
+      <PlantModal
+        isOpen={modalOpen}
+        onClose={handleCloseModal}
+        plantName={zhName}
+      />
     </group>
   );
 }
@@ -1138,6 +1367,7 @@ function DirectionalSun({ latitude, longitude, date }) {
   useFrame(() => {
     if (!lightRef.current) return;
 
+
     const pos = SunCalc.getPosition(date, latitude, longitude);
     const alt = pos.altitude;
     const az = pos.azimuth;
@@ -1393,8 +1623,10 @@ export function GardenPage() {
   const [wallPositions, setWallPositions] = useState<WallData[]>([]);
   const [currentRotation, setCurrentRotation] = useState(0);
 
-  const [latitude] = useState(30.59);
-  const [longitude] = useState(114.30);
+  const [latitude, setLatitude] = useState(30.59);
+  const [longitude, setLongitude] = useState(114.30);
+  const [province, setProvince] = useState("");
+  const [city, setCity] = useState("");
   const [date, setDate] = useState(new Date());
 
   const [cells, setCells] = useState<[number, number]>([10, 10]);
@@ -1410,6 +1642,10 @@ export function GardenPage() {
 
   const [svgElement, setSvgElement] = useState<JSX.Element | null>(null);
 
+  const [style, setStyle] = useState("");
+  const [viewSeason, setViewSeason] = useState("");
+  const [selectedPlants, setSelectedPlants] = useState<string[]>([]);
+
 
   const HALF_X = (cells[0] * CELL_SIZE) / 2;
   const HALF_Y = (cells[1] * CELL_SIZE) / 2;
@@ -1424,10 +1660,6 @@ export function GardenPage() {
   function svgToPng(svgElement: SVGSVGElement, width = 600, height = 600): Promise<Blob> {
     return new Promise((resolve, reject) => {
       try {
-
-        console.log("aaaaa")
-        console.log(svgElement)
-
         const svgrand = renderToStaticMarkup(
           <svg width={600} height={600} xmlns="http://www.w3.org/2000/svg">
             {svgElement}
@@ -1437,13 +1669,9 @@ export function GardenPage() {
         const parser = new DOMParser();
         const doc = parser.parseFromString(svgrand, "image/svg+xml");
         const svgNode = doc.documentElement;
-        console.log(svgNode)
 
         const serializer = new XMLSerializer();
         const svgString = serializer.serializeToString(svgNode);
-
-        console.log(svgString)
-
         const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
         const url = URL.createObjectURL(svgBlob);
 
@@ -1486,7 +1714,7 @@ export function GardenPage() {
 }
 
 
-  const handleScreenshot = async () => {
+  const handleScreenshot = async (plantList: {name: string; count: number}[]) => {
     if (!canvasRef.current) return;
 
     const payloads = [];
@@ -1516,57 +1744,15 @@ export function GardenPage() {
 
     payloads.push({ filename: `garden.png`, data: base64Data });
 
+    const all_payloads = {"images": payloads, "plantlist": plantList};
 
-    const response = await savePdf(payloads);
+    const response = await savePdf(all_payloads);
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement("a");
     link.href = url;
     link.download = "seasons.pdf";
     link.click();
   };
-
-
-
-  function buju() {
-    const radius = 25;
-    const canvas = document.createElement("canvas");
-    const cellSize = 50;
-    canvas.width = cells[0] * cellSize;
-    canvas.height = cells[1] * cellSize;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // 画格子和植物
-    plantsData.forEach(plant => {
-      ctx.fillStyle = plant.color || "#eee";
-      ctx.globalAlpha = 0.3;
-      ctx.fillRect(plant.position.x * cellSize, plant.position.y * cellSize, cellSize, cellSize);
-
-      ctx.globalAlpha = 0.7;
-      ctx.fillStyle = plant.plant.color;
-      ctx.beginPath();
-      ctx.arc(plant.position.x * cellSize + cellSize/2, plant.position.y * cellSize + cellSize/2, radius, 0, Math.PI*2);
-      ctx.fill();
-    });
-
-    // 转成 base64 PNG
-    const pngDataUrl = canvas.toDataURL("image/png"); 
-
-
-    payloads.push({ filename: "garden.png", data: pngDataUrl.split(",")[1] });
-    
-
-  } 
-
-
-  // const handleScreenshot = () => {
-  //   const dataURL = gl.domElement.toDataURL("image/png");
-  //   const link = document.createElement("a");
-  //   link.href = dataURL;
-  //   link.download = "screenshot.png";
-  //   link.click();
-  // };
-
 
 
   const handleCellClick = (x: number, y: number) => {
@@ -1681,14 +1867,19 @@ export function GardenPage() {
     // setFlowerPositions(selected);
   }, [cells, spaceRatio, spaceNeeded]);
 
-
   const PositionDatas = {
     "flowerPositions":flowerPositions,
     "waterPositions": waterPositions,
     "buildingPositions": buildingPositions,
     "wallPositions": wallPositions,
     "treePositions": treePositions,
-    "objectPositions": objectPositions
+    "objectPositions": objectPositions,
+    "property": {
+      "style": style,
+      "viewSeason": viewSeason,
+      "selectedPlants": selectedPlants,
+      "lat": latitude,
+    }
   }
 
   const rows = cells[0];
@@ -1696,8 +1887,6 @@ export function GardenPage() {
 
   const offsetX = cols % 2 === 0 ? CELL_SIZE / 2 : 1;
   const offsetY = rows % 2 === 0 ? CELL_SIZE / 2 : 0;
-
-
 
 
   return (
@@ -1831,6 +2020,18 @@ export function GardenPage() {
         setWallOffset={setWallOffset}
         svgElement = {svgElement}
         setSvgElement={setSvgElement}
+        setLatitude={setLatitude}
+        setLongitude={setLongitude}
+        province={province}
+        setProvince={setProvince}
+        city={city}
+        setCity={setCity}
+        style={style}
+        setStyle={setStyle}
+        viewSeason={viewSeason}
+        setViewSeason={setViewSeason}
+        selectedPlants={selectedPlants}
+        setSelectedPlants={setSelectedPlants}
         />
       </Box>
     </div>

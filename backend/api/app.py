@@ -8,6 +8,8 @@ from flask_jwt_extended import  JWTManager, create_access_token, jwt_required, g
 from datetime import timedelta
 import base64, io
 from fpdf import FPDF
+import math
+import re
 
 app = Flask(__name__, static_folder="../../frontend/dist", template_folder="../../frontend/dist")
 CORS(app)
@@ -186,195 +188,279 @@ def health_check():
     return jsonify({"success": True, "message": "服务正常运行"})
 
 
-def partition(data):
+# def partition(data):
 
-    # data = {
-    #     "flowerPositions": [{'x': 0, 'y': 9}, {'x': 1, 'y': 0}, {'x': 0, 'y': 4}, {'x': 0, 'y': 8}, {'x': 1, 'y': 1}, {'x': 0, 'y': 0}, {'x': 0, 'y': 1}, {'x': 0, 'y': 5}, {'x': 1, 'y': 5}, {'x': 1, 'y': 3}, {'x': 0, 'y': 2}, {'x': 0, 'y': 3}, {'x': 1, 'y': 2}, {'x': 1, 'y': 4}, {'x': 0, 'y': 7}, {'x': 0, 'y': 6}, {'x': 3, 'y': 0}, {'x': 1, 'y': 7}, {'x': 1, 'y': 6}, {'x': 2, 'y': 5}, {'x': 1, 'y': 8}, {'x': 1, 'y': 9}, {'x': 2, 'y': 0}, {'x': 2, 'y': 4}, {'x': 3, 'y': 2}, {'x': 2, 'y': 3}, {'x': 2, 'y': 1}, {'x': 2, 'y': 2}, {'x': 2, 'y': 9}, {'x': 3, 'y': 1}, {'x': 2, 'y': 8}, {'x': 2, 'y': 7}, {'x': 3, 'y': 3}, {'x': 6, 'y': 9}, {'x': 3, 'y': 9}, {'x': 4, 'y': 0}, {'x': 7, 'y': 1}, {'x': 4, 'y': 1}, {'x': 7, 'y': 5}, {'x': 4, 'y': 3}, {'x': 7, 'y': 3}, {'x': 4, 'y': 5}, {'x': 7, 'y': 0}, {'x': 4, 'y': 7}, {'x': 7, 'y': 2}, {'x': 4, 'y': 2}, {'x': 5, 'y': 0}, {'x': 4, 'y': 9}, {'x': 7, 'y': 6}, {'x': 5, 'y': 6}, {'x': 6, 'y': 6}, {'x': 4, 'y': 8}, {'x': 5, 'y': 1}, {'x': 6, 'y': 1}, {'x': 5, 'y': 9}, {'x': 5, 'y': 2}, {'x': 5, 'y': 3}, {'x': 6, 'y': 0}, {'x': 6, 'y': 5}],
-    #     "waterPositions": [{'x': 3, 'y': 4}, {'x': 4, 'y': 4}, {'x': 3, 'y': 5}],
-    #     "buildingPositions": [{'x': 7, 'y': 4}, {'x': 8, 'y': 6}],
-    #     "wallPositions": [{'x': 5, 'y': 7, 'rotation': 0}, {'x': 5, 'y': 8, 'rotation': 0}, {'x': 6, 'y': 7, 'rotation': 0}, {'x': 6, 'y': 8, 'rotation': 0}],
-    # }
+#     color_map = {
+#         "阴干": "#6BAF92",
+#         "阴湿": "#A88ED0",
+#         "阳干": "#F3A6B0",
+#         "阳湿": "#E58B4A"
+#     }
 
-    # 颜色映射
-    color_map = {
-        "阴干": "#6BAF92",
-        "阴湿": "#A88ED0",
-        "阳干": "#F3A6B0",
-        "阳湿": "#E58B4A"
+#     def get_neighbors(x, y, radius=1):
+#         """返回 (x,y) 周围 radius 格子的所有坐标"""
+#         coords = []
+#         for dx in range(-radius, radius+1):
+#             for dy in range(-radius, radius+1):
+#                 if dx == 0 and dy == 0:
+#                     continue
+#                 coords.append((x+dx, y+dy))
+#         return coords
+
+#     # 阴区格子集合
+#     shade_set = set()
+#     for b in data["buildingPositions"]:
+#         shade_set.update(get_neighbors(b["x"], b["y"], radius=1))
+#     for w in data["wallPositions"]:
+#         shade_set.update(get_neighbors(w["x"], w["y"], radius=2))
+
+#     # 湿地区格子集合
+#     wet_set = set()
+#     for water in data["waterPositions"]:
+#         wet_set.update(get_neighbors(water["x"], water["y"], radius=1))
+
+#     # 结果数组
+
+#     plants = Plants.query.all()
+#     for plant in plants:
+#         print(plant.name)
+#     flower_zones = []
+
+#     for f in data["flowerPositions"]:
+#         pos = (f["x"], f["y"])
+#         is_shade = pos in shade_set
+#         is_wet = pos in wet_set
+
+#         if is_shade and is_wet:
+#             t = "阴湿"
+#         elif is_shade and not is_wet:
+#             t = "阴干"
+#         elif not is_shade and is_wet:
+#             t = "阳湿"
+#         else:
+#             t = "阳干"
+
+#         flower_zones.append({
+#             "position": {"x": f["x"], "y": f["y"]},
+#             "type": t,
+#             "color": color_map[t]
+#         })
+
+
+#     # print(json.dumps(flower_zones, ensure_ascii=False, indent=2))
+
+#     all_plants = Plants.query.all()
+
+
+#     zone_query_map = {
+#         "全阴干": {"sunlight": ["低"], "water_need": ["低"]},
+#         "全阴湿": {"sunlight": ["低"], "water_need": ["高"]},
+#         "半日照干": {"sunlight": ["低"], "water_need": ["低"]},
+#         "半日照湿": {"sunlight": ["低"], "water_need": ["高"]},
+#         "全日照干": {"sunlight": ["高"], "water_need": ["低"]},
+#         "全日照湿": {"sunlight": ["低"], "water_need": ["高"]},
+#     }
+#     # 内存分组
+#     plants_by_zone = {z: [] for z in zone_query_map}
+
+#     for plant in all_plants:
+#         for zone_type, q in zone_query_map.items():
+#             if (plant.sunlight in q["sunlight"]) and (plant.water_need in q["water_need"]):
+#                 plants_by_zone[zone_type].append(plant)
+
+
+#     print(plants_by_zone)
+
+
+#     final_result = []
+#     for f in flower_zones:
+#         zone_type = f["type"]
+#         candidates = plants_by_zone.get(zone_type, [])
+#         # print(candidates)
+#         if candidates:
+#             plant = random.choice(candidates)
+#             f["plant"] = {
+#                 "id": plant.id,
+#                 "name": plant.name,
+#                 "latin_name": plant.latin_name,
+#                 "family": plant.family,
+#                 "genus": plant.genus,
+#                 "color": "#6BAF92"
+#             }
+#             f['models'] = [
+#         {
+#             "season": 0,
+#             "keyPrefix": "mint1",
+#             "models": [
+#                 {
+#                     "resource": "/models/mint/",
+#                     "name": "mint_1",
+#                     "upAxis": "y",
+#                     "target": 1,
+#                     "offset": [-0.1, 0, 0],
+#                 },
+#                 {
+#                     "resource": "/models/mint/",
+#                     "name": "mint_2",
+#                     "upAxis": "y",
+#                     "target": 1,
+#                     "offset": [0.2, 0, 0],
+#                 },
+#             ],
+#         },
+#         {
+#             "season": 1,
+#             "keyPrefix": "mint1",
+#             "models": [
+#                 {
+#                     "resource": "/models/mint/",
+#                     "name": "mint_2",
+#                     "upAxis": "y",
+#                     "target": 1,
+#                     "offset": [-0.2, 0, 0],
+#                 },
+#             ],
+#         },
+#         {
+#             "season": 2,
+#             "keyPrefix": "mint3",
+#             "models": [
+#                 {
+#                     "resource": "/models/mint/",
+#                     "name": "mint_3",
+#                     "upAxis": "y",
+#                     "target": 1,
+#                     "offset": [-0.3, 0, 0],
+#                 },
+#                 {
+#                     "resource": "/models/mint/",
+#                     "name": "mint_1",
+#                     "upAxis": "y",
+#                     "target": 1,
+#                     "offset": [0.4, 0, 0],
+#                 },
+#             ],
+#         },
+#         {
+#             "season": 3,
+#             "keyPrefix": "mint4",
+#             "models": [
+#                 {
+#                     "resource": "/models/mint/",
+#                     "name": "mint_4",
+#                     "upAxis": "y",
+#                     "target": 1,
+#                     "offset": [-0.5, 0, 0],
+#                 },
+#             ],
+#         },
+#     ]
+#         else:
+#             f["plant"] ={
+#                 "id": "",
+#                 "name":"",
+#                 "latin_name": "",
+#                 "family": "",
+#                 "genus": "",
+#                 "color": ""
+#             }
+#         final_result.append(f)
+
+
+#     # return json.dumps(result, ensure_ascii=False, indent=2)
+#     return final_result
+
+
+def match_season(view_season: str, db_value: str) -> bool:
+
+    season_map = {
+        "spring": range(3, 6+1),   # 3-6月
+        "summer": range(6, 9+1),   # 6-9月
+        "autumn": range(9, 11+1),  # 9-11月
+        "winter": [12, 1, 2],      # 12月,1月,2月
     }
 
-    def get_neighbors(x, y, radius=1):
-        """返回 (x,y) 周围 radius 格子的所有坐标"""
-        coords = []
-        for dx in range(-radius, radius+1):
-            for dy in range(-radius, radius+1):
-                if dx == 0 and dy == 0:
-                    continue
-                coords.append((x+dx, y+dy))
-        return coords
+    def parse_view_season(text: str):
+        text = text.strip()
 
-    # 阴区格子集合
-    shade_set = set()
-    for b in data["buildingPositions"]:
-        shade_set.update(get_neighbors(b["x"], b["y"], radius=1))
-    for w in data["wallPositions"]:
-        shade_set.update(get_neighbors(w["x"], w["y"], radius=2))
+        # 全年
+        if "全年" in text:
+            return list(range(1, 13))
+        # 秋冬
+        if "秋冬" in text:
+            return [9, 10, 11, 12]
+        # 食用/药用类不算观赏期
+        if "食用" in text:
+            return []
 
-    # 湿地区格子集合
-    wet_set = set()
-    for water in data["waterPositions"]:
-        wet_set.update(get_neighbors(water["x"], water["y"], radius=1))
+        # 匹配 "5-9月" 这种
+        m = re.match(r"(\d+)-(\d+)月", text)
+        if m:
+            start, end = int(m.group(1)), int(m.group(2))
+            if start <= end:
+                return list(range(start, end+1))
+            else:  # 跨年，比如 11-2月
+                return list(range(start, 13)) + list(range(1, end+1))
 
-    # 结果数组
+        # 单月 "6月"
+        m = re.match(r"(\d+)月", text)
+        if m:
+            return [int(m.group(1))]
 
-    plants = Plants.query.all()
-    for plant in plants:
-        print(plant.name)
-    flower_zones = []
+        return []
+    
+    season_months = season_map.get(view_season, [])
+    plant_months = parse_view_season(db_value)
 
-    for f in data["flowerPositions"]:
-        pos = (f["x"], f["y"])
-        is_shade = pos in shade_set
-        is_wet = pos in wet_set
-
-        if is_shade and is_wet:
-            t = "阴湿"
-        elif is_shade and not is_wet:
-            t = "阴干"
-        elif not is_shade and is_wet:
-            t = "阳湿"
-        else:
-            t = "阳干"
-
-        flower_zones.append({
-            "position": {"x": f["x"], "y": f["y"]},
-            "type": t,
-            "color": color_map[t]
-        })
+    return bool(set(season_months) & set(plant_months))
 
 
-    # print(json.dumps(flower_zones, ensure_ascii=False, indent=2))
-
-    all_plants = Plants.query.all()
+def match_lat(lat, cold_resistance):
 
 
-    zone_query_map = {
-        "全阴干": {"sunlight": ["低"], "water_need": ["低"]},
-        "全阴湿": {"sunlight": ["低"], "water_need": ["高"]},
-        "半日照干": {"sunlight": ["低"], "water_need": ["低"]},
-        "半日照湿": {"sunlight": ["低"], "water_need": ["高"]},
-        "全日照干": {"sunlight": ["高"], "water_need": ["低"]},
-        "全日照湿": {"sunlight": ["低"], "water_need": ["高"]},
-    }
-    # 内存分组
-    plants_by_zone = {z: [] for z in zone_query_map}
+    def parse_cold_tolerance(text: str) -> int:
+        """
+        提取耐寒字段里的最低温度（摄氏度）
+        比如 '耐寒（可耐 -20℃低温）' -> -20
+        '不耐寒（10℃以下生长受影响）' -> 5
+        """
+        text = text.strip()
 
-    for plant in all_plants:
-        for zone_type, q in zone_query_map.items():
-            if (plant.sunlight in q["sunlight"]) and (plant.water_need in q["water_need"]):
-                plants_by_zone[zone_type].append(plant)
+        # 匹配 -20℃ 这类
+        m = re.search(r"(-?\d+)℃", text)
+        if m:
+            return int(m.group(1))
 
+        # 特殊处理
+        if "不耐寒" in text:
+            # 默认 5℃ 作为临界
+            return 5
+        if "较耐寒" in text:
+            return -5
 
-    print(plants_by_zone)
+        return 99  # 无法识别时，给个大温度，表示要求不严格
 
+    def get_min_temp_by_location(lat):
+        if lat >= 50:   # 比如东北/内蒙古寒区
+            return -35
+        elif lat >= 40: # 北京、山东、陕西
+            return -20
+        elif lat >= 30: # 长江流域
+            return -10
+        elif lat >= 20: # 两广/云南
+            return 0
+        else:           # 海南等
+            return 5
 
-    final_result = []
-    for f in flower_zones:
-        zone_type = f["type"]
-        candidates = plants_by_zone.get(zone_type, [])
-        # print(candidates)
-        if candidates:
-            plant = random.choice(candidates)
-            f["plant"] = {
-                "id": plant.id,
-                "name": plant.name,
-                "latin_name": plant.latin_name,
-                "family": plant.family,
-                "genus": plant.genus,
-                "color": "#6BAF92"
-            }
-            f['models'] = [
-        {
-            "season": 0,
-            "keyPrefix": "mint1",
-            "models": [
-                {
-                    "resource": "/models/mint/",
-                    "name": "mint_1",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [-0.1, 0, 0],
-                },
-                {
-                    "resource": "/models/mint/",
-                    "name": "mint_2",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [0.2, 0, 0],
-                },
-            ],
-        },
-        {
-            "season": 1,
-            "keyPrefix": "mint1",
-            "models": [
-                {
-                    "resource": "/models/mint/",
-                    "name": "mint_2",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [-0.2, 0, 0],
-                },
-            ],
-        },
-        {
-            "season": 2,
-            "keyPrefix": "mint3",
-            "models": [
-                {
-                    "resource": "/models/mint/",
-                    "name": "mint_3",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [-0.3, 0, 0],
-                },
-                {
-                    "resource": "/models/mint/",
-                    "name": "mint_1",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [0.4, 0, 0],
-                },
-            ],
-        },
-        {
-            "season": 3,
-            "keyPrefix": "mint4",
-            "models": [
-                {
-                    "resource": "/models/mint/",
-                    "name": "mint_4",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [-0.5, 0, 0],
-                },
-            ],
-        },
-    ]
-        else:
-            f["plant"] ={
-                "id": "",
-                "name":"",
-                "latin_name": "",
-                "family": "",
-                "genus": "",
-                "color": ""
-            }
-        final_result.append(f)
+    min_temp = get_min_temp_by_location(float(lat))
+    plant_limit = parse_cold_tolerance(cold_resistance)
 
-
-    # return json.dumps(result, ensure_ascii=False, indent=2)
-    return final_result
+    print(lat)
+    print(min_temp)
+    print(cold_resistance)
+    print(plant_limit)
+    # 只要植物耐寒温度 <= 当地最低温度，就算适合
+    return plant_limit <= min_temp
 
 
 def partition(data):
@@ -403,11 +489,14 @@ def partition(data):
     shade_set = set()
     half_shade_set = set()
     for b in data["buildingPositions"]:
-        shade_set.add((b["x"], b["y"]))  # 完全遮挡
-        half_shade_set.update(get_neighbors(b["x"], b["y"], radius=1))
+        shade_set.add((math.ceil(b["x"]), math.ceil(b["y"])))  # 完全遮挡
+        half_shade_set.update(get_neighbors(math.ceil(b["x"]), math.ceil(b["y"]), radius=1))
     for w in data["wallPositions"]:
-        shade_set.add((w["x"], w["y"]))  # 完全遮挡
-        half_shade_set.update(get_neighbors(w["x"], w["y"], radius=1))
+        shade_set.add((math.ceil(w["x"]), math.ceil(w["y"])))
+        half_shade_set.update(get_neighbors(math.ceil(w["x"]), math.ceil(w["y"]), radius=1))
+
+    print (shade_set)
+    print (half_shade_set)
 
     # 湿地区格子
     wet_set = set()
@@ -441,11 +530,52 @@ def partition(data):
 
     # 植物分组
     all_plants = Plants.query.all()
+
+    print(data)
+    selectedPlants = data.get('property', {}).get("selectedPlants")
+
+    if selectedPlants:
+        all_plants = [p for p in all_plants if p.name in selectedPlants]
+
+
+    viewSeason = data.get('property', {}).get("viewSeason")
+    if viewSeason and viewSeason != 'none':
+        all_plants = [p for p in all_plants if match_season(viewSeason, p.ornamental_period)]
+
+    style = data.get('property', {}).get("style")
+    print(style)
+    if style and style != 'none':
+        style_dic = {
+            "meadow": "混合草甸",
+            "insectFriendly": "昆虫友好花园",
+            "rainGarden": "雨水花园",
+            "children": "儿童花园",
+            "healing": "疗愈花园",
+            "rock": "岩石花园",
+            "edible": "可食花园",
+        }
+
+        style = style_dic.get(style)
+        print(style)
+        
+        all_plants = [p for p in all_plants if style in p.garden_type.split("、")]
+        # for p in all_plants:
+        #     print(p.garden_type.split("、"))
+        #     print(style in p.garden_type.split("、"))
+
+    lat = data.get('property', {}).get("lat")
+    if lat:
+        all_plants = [p for p in all_plants if match_lat(lat, p.cold_resistance)]
+
+
+
+    
+    print(all_plants)
     zone_query_map = {
         "全阴干": {"sunlight": ["低"], "water_need": ["低"]},
         "全阴湿": {"sunlight": ["低"], "water_need": ["高"]},
-        "半日照干": {"sunlight": ["中"], "water_need": ["低"]},
-        "半日照湿": {"sunlight": ["中"], "water_need": ["高"]},
+        "半日照干": {"sunlight": ["中"], "water_need": ["低", "中", "中、低"]},
+        "半日照湿": {"sunlight": ["中"], "water_need": ["高", "中", "高、中"]},
         "全日照干": {"sunlight": ["高"], "water_need": ["低"]},
         "全日照湿": {"sunlight": ["高"], "water_need": ["高"]},
     }
@@ -453,8 +583,10 @@ def partition(data):
     plants_by_zone = {z: [] for z in zone_query_map}
     for plant in all_plants:
         for zone_type, q in zone_query_map.items():
-            if (plant.sunlight in q["sunlight"]) and (plant.water_need in q["water_need"]):
+            if (set(plant.sunlight.split("、")) & set(q["sunlight"])) and (plant.water_need in q["water_need"]):
                 plants_by_zone[zone_type].append(plant)
+    
+    print(plants_by_zone)
 
     # 最终结果
     final_result = []
@@ -565,12 +697,13 @@ def partition(data):
         else:
             f["plant"] ={
                 "id": "",
-                "name":"",
+                "name":"无",
                 "latin_name": "",
                 "family": "",
                 "genus": "",
-                "color": ""
+                "color": "#FFFFFF"
             }
+            f["models"] = []
         final_result.append(f)
 
 
@@ -587,25 +720,6 @@ def plants_data():
     data = partition(data)
 
     # print(data)
-
-    # if not data:
-    #     return jsonify({"success": False, "message": "请求参数必须为 JSON"}), 400
-
-
-    # plants = Plants.query.all()
-    # for plant in plants:
-    #     print(plant.name)
-
-    # data = []
-
-    # data = [
-    #     { "position": { "x": 0, "y": 0 }, "type": "针芒", "color": "#6BAF92" },
-    #     { "position": { "x": 1, "y": 0 }, "type": "鼠尾草", "color": "#A88ED0" },
-    #     { "position": { "x": 2, "y": 1 }, "type": "落新妇", "color": "#F3A6B0" },
-    #     { "position": { "x": 3, "y": 2 }, "type": "松果菊", "color": "#E58B4A" },
-    #     { "position": { "x": 6, "y": 2 }, "type": "薰衣草", "color": "#9A66CC" }
-    #     ]
-
 
     return jsonify({"success": True, "message": "获取模型配置成功", "data": data})
 
@@ -894,26 +1008,88 @@ def save_pdf():
     返回生成的 PDF
     """
     body = request.get_json()
-    # images = body.get("images", [])
-    images = body
+    images = body.get("images", [])
+    plantlist = body.get("plantlist", [])
+    print(plantlist)
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
+    # pdf.set_font("Arial", "B", 14)
+    path = './SimHei.ttf'
+    pdf.add_font("NotoSans", "", path, uni=True)
+    
+    pdf.set_font("NotoSans", size=14)
+    pdf.add_page()
+    pdf.multi_cell(0, 10, "种植清单", align="C")
+    pdf.ln(5)
+
+    # 表头
+    pdf.set_font("NotoSans", size=12)
+    pdf.cell(100, 10, "植物名称", border=1, align="C")
+    pdf.cell(40, 10, "数量", border=1, align="C")
+    pdf.ln()
+
+    # 渲染列表
+    for item in plantlist:
+        pdf.cell(100, 10, item["name"], border=1, align="C")
+        pdf.cell(40, 10, str(item["count"]), border=1, align="C")
+        pdf.ln()
+
+    pdf.add_page()
+    pdf.set_font("NotoSans", size=14)
+    pdf.multi_cell(0, 10, "养护清单", align="C")
+    pdf.ln(5)
+
+    pdf.set_fill_color(200, 220, 255)  # 淡蓝色背景
+    pdf.cell(40, 10, "植物名称", border=1, align="C", fill=True)
+    pdf.cell(50, 10, "常见病害", border=1, align="C", fill=True)
+    pdf.cell(50, 10, "修剪建议", border=1, align="C", fill=True)
+    pdf.cell(50, 10, "防治方法", border=1, align="C", fill=True)
+    pdf.ln()
+
+    # 表格内容
+    pdf.set_font("NotoSans", size=10)
+
+    for item in plantlist:
+        plant = Plants.query.filter_by(name=item["name"]).first()
+        if not plant:
+            continue
+
+        # 名称（带数量）
+        pdf.cell(40, 10, f"{plant.name} × {item['count']}", border=1, align="L")
+
+        # 常见病害
+        pdf.cell(50, 10, plant.common_diseases or "-", border=1, align="L")
+
+        # 修剪建议
+        pdf.cell(50, 10, plant.pruning or "-", border=1, align="L")
+
+        # 防治方法
+        pdf.cell(50, 10, plant.control_methods or "-", border=1, align="L")
+
+        pdf.ln()
+
+    season_dic = {
+        '0': '春', '1': '夏', '2': '秋', '3': '冬'
+    }
 
     for img in images:
         filename = img["filename"]
         data = img["data"]
         img_bytes = base64.b64decode(data)
+        season = season_dic.get(filename.split(".")[0])
+        title = f"{season}季实景效果"
+        if season is None:
+            title = "花园平面效果"
 
         # 使用 BytesIO 临时存储图片
         img_io = io.BytesIO(img_bytes)
 
         pdf.add_page()
 
-        pdf.set_font("Arial", "B", 14)
-        pdf.multi_cell(0, 10, "66666666666666666666666666", align="C")
+        pdf.multi_cell(0, 10, title, align="C")
         pdf.ln(5)  # 空一行
-        pdf.image(img_io, x=10, y=10, w=180)  # 调整位置和宽度
+        pdf.image(img_io, x=10, y=50, w=180)  # 调整位置和宽度
 
     # 将 PDF 写入 BytesIO
     pdf_io = io.BytesIO()
@@ -926,6 +1102,15 @@ def save_pdf():
         download_name="seasons.pdf",
         mimetype="application/pdf"
     )
+
+
+
+# 获取单个植物
+@app.get("/api/get_plant_detail")
+def get_plant_detail():
+    name = request.args.get("name")
+    result = f"这是一个植物，{name}"
+    return ok(result)
 
 
 
