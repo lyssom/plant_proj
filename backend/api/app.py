@@ -10,6 +10,7 @@ import base64, io
 from fpdf import FPDF
 import math
 import re
+from openai import OpenAI
 
 app = Flask(__name__, static_folder="../../frontend/dist", template_folder="../../frontend/dist")
 CORS(app)
@@ -1105,10 +1106,33 @@ def save_pdf():
 
 
 
+def query_deepseek(name):
+    client = OpenAI(api_key="sk-48811da9f30a46c8a40fa6bbc95318c9", base_url="https://api.deepseek.com")
+
+    print(name)
+
+    response = client.chat.completions.create(
+        model="deepseek-chat",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": f'你是一个植物专家，给出{name}的信息'},
+        ],
+        stream=False
+    )
+
+    if response.status_code == 200:
+        result = response.json()
+        print(result['choices'][0]['message']['content'])
+    else:
+        print("请求失败，错误码：", response.status_code)
+
+
+
 # 获取单个植物
 @app.get("/api/get_plant_detail")
 def get_plant_detail():
     name = request.args.get("name")
+    query_deepseek(name)
     result = f"这是一个植物，{name}"
     return ok(result)
 
