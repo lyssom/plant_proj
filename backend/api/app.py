@@ -591,30 +591,26 @@ def partition(data):
 
     # 最终结果
     final_result = []
-    for f in flower_zones:
-        zone_type = f["type"]
-        candidates = plants_by_zone.get(zone_type, [])
-        if candidates:
-            plant = random.choice(candidates)
-            f["plant"] = {
-                "id": plant.id,
-                "name": plant.name,
-                "latin_name": plant.latin_name,
-                "family": plant.family,
-                "genus": plant.genus,
-                "color": "#6BAF92"
-            }
-            f['models'] = [
+    pos_to_zone = {(f["position"]["x"], f["position"]["y"]): f for f in flower_zones}
+    assigned = set()
+
+    # 获取边界坐标
+    max_x = max(f["position"]["x"] for f in flower_zones)
+    max_y = max(f["position"]["y"] for f in flower_zones)
+    min_x = min(f["position"]["x"] for f in flower_zones)
+    min_y = min(f["position"]["y"] for f in flower_zones)
+
+
+    base_models = [
         {
             "season": 0,
             "keyPrefix": "mint1",
             "models": [
                 {                
-                    "resource": "/models/tree/",
-                    "name": "tree",
+                    "resource": "/models/mint/",
+                    "name": "mint_1",
                     "upAxis": "y",
                     "target": 1,
-                    "offset": [-0.1, 0, 0],
                 },
             ],
         },
@@ -623,18 +619,11 @@ def partition(data):
             "keyPrefix": "mint1",
             "models": [
                                 {
-                    "resource": "/models/tree/",
-                    "name": "tree",
+                    "resource": "/models/mint/",
+                    "name": "mint_2",
                     "upAxis": "y",
                     "target": 1,
-                    "offset": [-0.1, 0, 0],
-                },                {
-                    "resource": "/models/tree/",
-                    "name": "tree",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [-0.2, 0, 0],
-                },
+                }
             ],
         },
         {
@@ -642,23 +631,10 @@ def partition(data):
             "keyPrefix": "mint3",
             "models": [
                 {                
-                    "resource": "/models/tree/",
-                    "name": "tree",
+                    "resource": "/models/mint/",
+                    "name": "mint_3",
                     "upAxis": "y",
                     "target": 1,
-                    "offset": [-0.1, 0, 0],
-                },{              
-                    "resource": "/models/tree/",
-                    "name": "tree",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [-0.2, 0, 0],
-                },{                
-                    "resource": "/models/tree/",
-                    "name": "tree",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [-0.3, 0, 0],
                 }
             ],
         },
@@ -668,44 +644,131 @@ def partition(data):
             "models": [
                 {
                                 
-                    "resource": "/models/tree/",
-                    "name": "tree",
+                    "resource": "/models/mint/",
+                    "name": "mint_4",
                     "upAxis": "y",
                     "target": 1,
-                    "offset": [-0.1, 0, 0],
-                },{              
-                    "resource": "/models/tree/",
-                    "name": "tree",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [-0.2, 0, 0],
-                },{                
-                    "resource": "/models/tree/",
-                    "name": "tree",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [-0.3, 0, 0],
-                }, {                
-                    "resource": "/models/tree/",
-                    "name": "tree",
-                    "upAxis": "y",
-                    "target": 1,
-                    "offset": [-0.4, 0, 0],
                 }
             ],
         },
     ]
+
+
+    base_models2 = [
+        {
+            "season": 0,
+            "keyPrefix": "mint1",
+            "models": [
+                {                
+                    "resource": "/models/tree/",
+                    "name": "tree",
+                    "upAxis": "y",
+                    "target": 1,
+                },
+            ],
+        }
+    ]
+
+    for f in flower_zones:
+        pos = (f["position"]["x"], f["position"]["y"])
+        if pos in assigned:
+            continue
+
+        zone_type = f["type"]
+        candidates = plants_by_zone.get(zone_type, [])
+
+        if candidates:
+            plant = random.choice(candidates)
+            plant_info = {
+                "id": plant.id,
+                "name": plant.name,
+                "latin_name": plant.latin_name,
+                "family": plant.family,
+                "genus": plant.genus,
+                "color": plant.color,
+                "modles": plant.model_config
+            }
         else:
-            f["plant"] ={
+            plant_info = {
                 "id": "",
-                "name":"无",
+                "name": "无",
                 "latin_name": "",
                 "family": "",
                 "genus": "",
                 "color": "#FFFFFF"
             }
-            f["models"] = []
-        final_result.append(f)
+
+        cluster_mode = random.choice([1, 2])
+        if cluster_mode == 2:
+            cluster_positions = [
+                    pos,
+                    (pos[0] + 1, pos[1]),
+                    (pos[0], pos[1] + 1),
+                    (pos[0] + 1, pos[1] + 1),
+                ]
+            
+            for p in cluster_positions:
+                print(66666666)
+                print(p)
+                print(pos_to_zone)
+                print(6666666677)
+                if p not in pos_to_zone:
+                    cluster_mode = 1
+                    break
+
+                # if p in pos_to_zone:
+
+        # 决定偏移量，如果在边界则不偏移
+        if pos[0] == max_x or pos[1] == max_y or pos[0] == min_x or pos[1] == min_y:
+            offset_x = 0
+            offset_y = 0
+        else:
+            offset_x = -round(random.uniform(0.1, 0.5), 2)
+            offset_y = -round(random.uniform(0.1, 0.5), 2)
+
+        if cluster_mode == 1:
+            plant_info["display_x"] = pos[0] + offset_x
+            plant_info["display_y"] = pos[1] + offset_y
+            plant_info["display_radius"] = 25
+            f["plant"] = plant_info
+            plant_info["mod"] = 1
+            f["models"] = plant_info.get('models', []) if plant_info.get('models', []) else base_models
+            final_result.append(f)
+            assigned.add(pos)
+
+        else:
+            for cpos in cluster_positions:
+                if cpos in pos_to_zone and cpos not in assigned:
+                    ox, oy = -round(random.uniform(0.1, 0.3), 2), -round(random.uniform(0.1, 0.3), 2)
+
+                    cf = pos_to_zone[cpos]
+                    # 边界不偏移
+                    if cpos[0] == max_x:
+                        ox = -0.5
+                    if cpos[1] == max_y:
+                        oy = -0.5
+                    if cpos[0] == min_x:
+                        print(cpos)
+                        ox = 0.5
+                    if cpos[1] == min_y:
+                        print(cpos)
+                        oy = 0.5
+
+                    # print(3333333)
+                    # print(plant_info)
+                    # print(cf)
+                    # print(cpos[0],  cpos[1])
+                    # print(3333333222)
+
+                    plant_info["display_x"] = cpos[0] + ox
+                    plant_info["display_y"] = cpos[1] + oy
+                    plant_info["display_radius"] = 50
+                    cf["plant"] = plant_info
+                    plant_info["mod"] = 2
+                    cf["models"] = plant_info.get('models', []) if plant_info.get('models', []) else base_models2
+                    final_result.append(cf)
+                    assigned.add(cpos)
+
 
 
     return final_result

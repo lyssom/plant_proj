@@ -930,11 +930,20 @@ function ObjectGLBModel({
     });
   }, [Reasource, name, upAxis]);
 
-  useFrame(() => {
+  const phaseOffset = useMemo(() => Math.random() * Math.PI * 2, []); // 每株不同
+
+  useFrame(({ clock }) => {
     if (ref.current) {
       ref.current.scale.x = Math.min(ref.current.scale.x + 0.01, target[0]);
       ref.current.scale.y = Math.min(ref.current.scale.y + 0.01, target[1]);
       ref.current.scale.z = Math.min(ref.current.scale.z + 0.01, target[2]);
+
+      const t = clock.getElapsedTime();
+      const sway = Math.sin(t * 1.5 + phaseOffset) * 0.1;
+      const tilt = Math.cos(t * 1.2 + phaseOffset) * 0.15;
+
+      ref.current.rotation.z = sway;
+      ref.current.rotation.x = tilt;
     }
   });
 
@@ -942,13 +951,6 @@ function ObjectGLBModel({
     e.stopPropagation();
     console.log(66666666666666);
     setModalOpen(true);
-//     alert(`
-// 名称: ${plant.name}
-// 拉丁名: ${plant.latin_name}
-// 科: ${plant.family}
-// 属: ${plant.genus}
-// 颜色: ${plant.color}
-//     `);
   };
 
   const handleCloseModal = () => {
@@ -1493,11 +1495,11 @@ export function GardenModal(
         height={600}
         style={{ border: "1px solid #ccc", background: "#fdfdfd" }}
       >
-        {/* 绘制格子 */}
+        {/* 1. 先绘制格子 */}
         {Array.from({ length: cells[0] }).map((_, i) =>
           Array.from({ length: cells[1] }).map((_, j) => (
             <rect
-              key={`${i}-${j}`}
+              key={`cell-${i}-${j}`}
               x={i * cellSize}
               y={j * cellSize}
               width={cellSize}
@@ -1508,46 +1510,56 @@ export function GardenModal(
           ))
         )}
 
-        {/* 绘制植物 */}
+        {/* 2. 绘制植物的圆 */}
+
         {plantsData.map((plant, idx) => {
           const x = plant.position.x * cellSize;
           const y = plant.position.y * cellSize;
 
           return (
-            <g key={idx}>
-              {/* 背景格子，只显示分区颜色 */}
-              <rect
-                x={x}
-                y={y}
-                width={cellSize}
-                height={cellSize}
-                fill={plant.color || "#eee"} // 分区颜色
-                opacity={0.3} // 半透明
-              />
-              {/* 圆，显示植物颜色 */}
-              <circle
-                cx={x + cellSize / 2}
-                cy={y + cellSize / 2}
-                r={radius}
-                fill={plant.plant.color}
-                opacity={0.7}
-              />
-              {/* 文字 */}
-              <text
-                x={x + cellSize / 2}
-                y={y + cellSize / 2 + 5}
-                fontSize="12"
-                textAnchor="middle"
-                fill="#000"
-                dominantBaseline="middle"
-              >
-                {plant.plant.name}
-              </text>
-            </g>
+            <rect x={x} y={y} width={cellSize} height={cellSize} fill={plant.color || "#eee"} opacity={0.3}/>
+          );
+        })}
+        {plantsData.map((plant, idx) => {
+          const plant_x = plant.plant.display_x * cellSize;
+          const plant_y = plant.plant.display_y * cellSize;
+
+          return (
+            <circle
+              key={`circle-${idx}`}
+              cx={plant_x + cellSize / 2}
+              cy={plant_y + cellSize / 2}
+              r={plant.plant.display_radius}
+              fill={plant.plant.color}
+              opacity={0.7}
+            />
+          );
+        })}
+
+        {/* 3. 最后绘制文字（保证永远在最上层） */}
+        {plantsData.map((plant, idx) => {
+          const plant_x = plant.plant.display_x * cellSize;
+          const plant_y = plant.plant.display_y * cellSize;
+
+          return (
+            <text
+              key={`text-${idx}`}
+              x={plant_x + cellSize / 2}
+              y={plant_y + cellSize / 2}
+              fontSize="16"
+              textAnchor="middle"
+              fill="#000"
+              // stroke="#fff"     // 白色描边，更清晰
+              strokeWidth={2}
+              dominantBaseline="middle"
+            >
+              {plant.plant.name}
+            </text>
           );
         })}
       </svg>
     );
+
   }, [plantsData]);
 
   return (
@@ -1936,33 +1948,58 @@ export function GardenPage() {
         {loaded &&
           plantsData.map((plantCfg, i) => {
             const latinName = plantCfg.plant?.latin_name ?? ""; // 获取 latin_name
+            const mod = plantCfg.plant?.mod ?? 1;
+
+            // 基础位置
+            const basePos: [number, number, number] = [
+              plantCfg.plant.display_x * CELL_SIZE,
+              0,
+              plantCfg.plant.display_y * CELL_SIZE,
+            ];
+
+            // 如果 mod=2，则添加左上、上、左三个偏移
+            const extraOffsets: [number, number, number][] =
+              mod === 2
+                ? [
+                    [-CELL_SIZE, 0, -CELL_SIZE], // 左上
+                    [0, 0, -CELL_SIZE],          // 上
+                    [-CELL_SIZE, 0, 0],          // 左
+                  ]
+                : [];
+
+            // 最终所有需要渲染的位置
+            const positions = [basePos, ...extraOffsets.map((off) => [
+              basePos[0] + off[0],
+              basePos[1] + off[1],
+              basePos[2] + off[2],
+            ])];
+
             return (
               <group key={`group-${i}`}>
                 {plantCfg.models
                   .filter((seasonCfg) => seasonCfg.season === season)
                   .map((seasonCfg, si) => (
                     <group key={`${plantCfg.plant.id}-group-${i}-${si}`}>
-                      {seasonCfg.models.map((m, j) => (
-                        <ObjectGLBModel
-                          key={`${seasonCfg.keyPrefix}-${j}-${i}`}
-                          Reasource={m.resource}
-                          name={m.name}
-                          latinName={latinName} // 传入 latin_name
-                          zhName={plantCfg.plant.name}
-                          position={[
-                            plantCfg.position.x * CELL_SIZE + (m.offset?.[0] ?? 0),
-                            (m.offset?.[1] ?? 0),
-                            plantCfg.position.y * CELL_SIZE + (m.offset?.[2] ?? 0),
-                          ]}
-                          upAxis={m.upAxis}
-                          target={[m.target, m.target, m.target]}
-                        />
-                      ))}
+                      {seasonCfg.models.map((m, j) =>
+                        positions.map((pos, pi) => (
+                          <ObjectGLBModel
+                            key={`${seasonCfg.keyPrefix}-${j}-${i}-${pi}`}
+                            Reasource={m.resource}
+                            name={m.name}
+                            latinName={latinName}
+                            zhName={plantCfg.plant.name}
+                            position={pos}
+                            upAxis={m.upAxis}
+                            target={[m.target, m.target, m.target]}
+                          />
+                        ))
+                      )}
                     </group>
                   ))}
               </group>
             );
           })}
+
 
           
 
