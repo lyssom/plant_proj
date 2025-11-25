@@ -1,3 +1,4 @@
+from copy import deepcopy
 from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -11,12 +12,14 @@ from fpdf import FPDF
 import math
 import re
 from openai import OpenAI
+from sqlalchemy import and_
+from sqlalchemy.dialects import sqlite
 
 app = Flask(__name__, static_folder="../../frontend/dist", template_folder="../../frontend/dist")
 CORS(app)
 
 # SQLite 配置
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users11.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///plants.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -29,12 +32,9 @@ jwt = JWTManager(app)
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve(path):
-    print(66666666)
     if path != "" and os.path.exists(app.static_folder + "/" + path):
-        print(app.static_folder + "/" + path)
         return send_from_directory(app.static_folder, path)
     else:
-        print(app.static_folder + "/index.html")
         return send_from_directory(app.static_folder, "index.html")
 
 
@@ -81,28 +81,30 @@ class Plants(db.Model):
     latin_name = db.Column(db.String, nullable=True)           # 拉丁名
     lifecycle = db.Column(db.String, nullable=True)            # 生命周期
     classification = db.Column(db.String, nullable=True)       # 植物分类
-    garden_type = db.Column(db.String, nullable=True)          # 花园类型
+    crown_width = db.Column(db.String, nullable=True)          # 冠幅
     sunlight = db.Column(db.String, nullable=True)             # 日照
     water_need = db.Column(db.String, nullable=True)           # 需水量
-    cold_resistance = db.Column(db.String, nullable=True)      # 耐寒能力
     self_sowing = db.Column(db.String, nullable=True)          # 自播能力
     lodging_resistance = db.Column(db.String, nullable=True)   # 抗倒伏情况
-    crown_width_cm = db.Column(db.String, nullable=True)       # 冠幅（cm）
-    height_spring = db.Column(db.String, nullable=True)        # 植株高度-春
-    height_summer = db.Column(db.String, nullable=True)        # 植株高度-夏
-    height_autumn = db.Column(db.String, nullable=True)        # 植株高度-秋
-    height_winter = db.Column(db.String, nullable=True)        # 植株高度-冬
-    ornamental_period = db.Column(db.String, nullable=True)    # 观赏期
-    flower_color = db.Column(db.String, nullable=True)         # 花朵颜色
-    flower_height_cm = db.Column(db.String, nullable=True)     # 花朵高度（cm）
+    color = db.Column(db.String, nullable=True)                # 色系
     usage = db.Column(db.Text, nullable=True)                  # 用途/特点
     control_methods = db.Column(db.Text, nullable=True)        # 防治方法
     common_diseases = db.Column(db.Text, nullable=True)        # 常见病害
     pruning = db.Column(db.String, nullable=True)              # 修剪节点
     watering_frequency = db.Column(db.String, nullable=True)   # 浇水频率
     needs_support = db.Column(db.String, nullable=True)        # 是否需要支架
-    color = db.Column(db.String, nullable=True)                # 颜色
-    model_config = db.Column(db.Text, nullable=True)
+    hard_zone = db.Column(db.String, nullable=True)            # 耐寒分区
+    rock = db.Column(db.String, nullable=True)                 # 岩石园
+    insect = db.Column(db.String, nullable=True)               # 昆虫友好花园
+    edible = db.Column(db.String, nullable=True)               # 可食花园
+    meadow = db.Column(db.String, nullable=True)               # 混合草甸花园
+    rain_garden = db.Column(db.String, nullable=True)          # 雨水花园
+    healing = db.Column(db.String, nullable=True)              # 疗愈花园
+    scent_garden = db.Column(db.String, nullable=True)         # 芳香花园
+    normal_garden = db.Column(db.String, nullable=True)        # 零维护花园
+    model_path = db.Column(db.Text, nullable=True)
+    show_type = db.Column(db.String, nullable=True)
+    color_hex = db.Column(db.String, nullable=True)
     
 
 
@@ -111,7 +113,7 @@ def create_tables():
     """创建数据库表"""
     with app.app_context():
         db.create_all()
-        print("数据库表创建完成")
+        # print("数据库表创建完成")
 
 # 初始化数据库
 create_tables()
@@ -172,7 +174,7 @@ def register():
         db.session.commit()
         return jsonify({"success": True, "message": "注册成功"})
     except Exception as e:
-        print(e)
+        # print(e)
         db.session.rollback()
         return jsonify({"success": False, "message": f"注册失败: {str(e)}"}), 500
 
@@ -456,16 +458,18 @@ def match_lat(lat, cold_resistance):
     min_temp = get_min_temp_by_location(float(lat))
     plant_limit = parse_cold_tolerance(cold_resistance)
 
-    print(lat)
-    print(min_temp)
-    print(cold_resistance)
-    print(plant_limit)
+    # print(lat)
+    # print(min_temp)
+    # print(cold_resistance)
+    # print(plant_limit)
     # 只要植物耐寒温度 <= 当地最低温度，就算适合
     return plant_limit <= min_temp
 
 
 def partition(data):
     import random
+
+    # print(data)
 
     # 颜色映射（可以再扩展6类颜色）
     color_map = {
@@ -485,6 +489,13 @@ def partition(data):
                     continue
                 coords.append((x + dx, y + dy))
         return coords
+    
+    
+    def get_model_config(model_path):
+        model_path = '../../frontend/public/models/' + model_path + '/metadata.json'
+        with open(model_path, "r") as f:
+            model_config = json.load(f)
+            return model_config
 
     # 阴影格子
     shade_set = set()
@@ -496,8 +507,8 @@ def partition(data):
         shade_set.add((math.ceil(w["x"]), math.ceil(w["y"])))
         half_shade_set.update(get_neighbors(math.ceil(w["x"]), math.ceil(w["y"]), radius=1))
 
-    print (shade_set)
-    print (half_shade_set)
+    # print (shade_set)
+    # print (half_shade_set)
 
     # 湿地区格子
     wet_set = set()
@@ -530,9 +541,33 @@ def partition(data):
         })
 
     # 植物分组
-    all_plants = Plants.query.all()
 
-    print(data)
+    query = Plants.query.filter(
+        (Plants.show_type.is_(None)) | (Plants.show_type == ''),
+        Plants.model_path.isnot(None),
+        Plants.model_path != '',
+        ~Plants.name.in_([
+            # '葱', 
+            # "羽衣甘蓝", 
+            # "羽扇豆（鲁冰花）",
+            # "小花葱", 
+            # "醉鱼草",
+            # "毛地黄",
+            # "大花飞燕草",
+            ])
+    )
+
+    print(
+        query.statement.compile(
+            dialect=sqlite.dialect(),
+            compile_kwargs={"literal_binds": True}
+        )
+    )
+
+    all_plants = query.all()
+    print(all_plants)
+
+    # print(data)
     selectedPlants = data.get('property', {}).get("selectedPlants")
 
     if selectedPlants:
@@ -544,7 +579,7 @@ def partition(data):
         all_plants = [p for p in all_plants if match_season(viewSeason, p.ornamental_period)]
 
     style = data.get('property', {}).get("style")
-    print(style)
+    # print(style)
     if style and style != 'none':
         style_dic = {
             "meadow": "混合草甸",
@@ -557,21 +592,22 @@ def partition(data):
         }
 
         style = style_dic.get(style)
-        print(style)
+        # print(style)
         
         all_plants = [p for p in all_plants if style in p.garden_type.split("、")]
         # for p in all_plants:
         #     print(p.garden_type.split("、"))
         #     print(style in p.garden_type.split("、"))
 
-    lat = data.get('property', {}).get("lat")
-    if lat:
-        all_plants = [p for p in all_plants if match_lat(lat, p.cold_resistance)]
+    # lat = data.get('property', {}).get("lat")
+    # if lat:
+    #     all_plants = [p for p in all_plants if match_lat(lat, p.cold_resistance)]
+        
 
 
 
     
-    print(all_plants)
+    # print(all_plants)
     zone_query_map = {
         "全阴干": {"sunlight": ["低"], "water_need": ["低"]},
         "全阴湿": {"sunlight": ["低"], "water_need": ["高"]},
@@ -595,79 +631,11 @@ def partition(data):
     assigned = set()
 
     # 获取边界坐标
-    max_x = max(f["position"]["x"] for f in flower_zones)
-    max_y = max(f["position"]["y"] for f in flower_zones)
-    min_x = min(f["position"]["x"] for f in flower_zones)
-    min_y = min(f["position"]["y"] for f in flower_zones)
-
-
-    base_models = [
-        {
-            "season": 0,
-            "keyPrefix": "mint1",
-            "models": [
-                {                
-                    "resource": "/models/mint/",
-                    "name": "mint_1",
-                    "upAxis": "y",
-                    "target": 1,
-                },
-            ],
-        },
-        {
-            "season": 1,
-            "keyPrefix": "mint1",
-            "models": [
-                                {
-                    "resource": "/models/mint/",
-                    "name": "mint_2",
-                    "upAxis": "y",
-                    "target": 1,
-                }
-            ],
-        },
-        {
-            "season": 2,
-            "keyPrefix": "mint3",
-            "models": [
-                {                
-                    "resource": "/models/mint/",
-                    "name": "mint_3",
-                    "upAxis": "y",
-                    "target": 1,
-                }
-            ],
-        },
-        {
-            "season": 3,
-            "keyPrefix": "mint4",
-            "models": [
-                {
-                                
-                    "resource": "/models/mint/",
-                    "name": "mint_4",
-                    "upAxis": "y",
-                    "target": 1,
-                }
-            ],
-        },
-    ]
-
-
-    base_models2 = [
-        {
-            "season": 0,
-            "keyPrefix": "mint1",
-            "models": [
-                {                
-                    "resource": "/models/tree/",
-                    "name": "tree",
-                    "upAxis": "y",
-                    "target": 1,
-                },
-            ],
-        }
-    ]
+    if flower_zones:
+        max_x = max(f["position"]["x"] for f in flower_zones)
+        max_y = max(f["position"]["y"] for f in flower_zones)
+        min_x = min(f["position"]["x"] for f in flower_zones)
+        min_y = min(f["position"]["y"] for f in flower_zones)
 
     for f in flower_zones:
         pos = (f["position"]["x"], f["position"]["y"])
@@ -676,17 +644,20 @@ def partition(data):
 
         zone_type = f["type"]
         candidates = plants_by_zone.get(zone_type, [])
+        candidates = all_plants
+        # print(candidates)
 
         if candidates:
             plant = random.choice(candidates)
+            print(plant.name)
             plant_info = {
                 "id": plant.id,
                 "name": plant.name,
                 "latin_name": plant.latin_name,
                 "family": plant.family,
                 "genus": plant.genus,
-                "color": plant.color,
-                "modles": plant.model_config
+                "color": plant.color_hex,
+                # "modles": plant.model_config
             }
         else:
             plant_info = {
@@ -708,10 +679,10 @@ def partition(data):
                 ]
             
             for p in cluster_positions:
-                print(66666666)
-                print(p)
-                print(pos_to_zone)
-                print(6666666677)
+                # print(66666666)
+                # print(p)
+                # print(pos_to_zone)
+                # print(6666666677)
                 if p not in pos_to_zone:
                     cluster_mode = 1
                     break
@@ -732,7 +703,7 @@ def partition(data):
             plant_info["display_radius"] = 25
             f["plant"] = plant_info
             plant_info["mod"] = 1
-            f["models"] = plant_info.get('models', []) if plant_info.get('models', []) else base_models
+            f["models"] = get_model_config(plant.model_path)
             final_result.append(f)
             assigned.add(pos)
 
@@ -748,28 +719,356 @@ def partition(data):
                     if cpos[1] == max_y:
                         oy = -0.5
                     if cpos[0] == min_x:
-                        print(cpos)
                         ox = 0.5
                     if cpos[1] == min_y:
-                        print(cpos)
                         oy = 0.5
-
-                    # print(3333333)
-                    # print(plant_info)
-                    # print(cf)
-                    # print(cpos[0],  cpos[1])
-                    # print(3333333222)
 
                     plant_info["display_x"] = cpos[0] + ox
                     plant_info["display_y"] = cpos[1] + oy
                     plant_info["display_radius"] = 50
                     cf["plant"] = plant_info
                     plant_info["mod"] = 2
-                    cf["models"] = plant_info.get('models', []) if plant_info.get('models', []) else base_models2
+                    # cf["models"] = plant_info.get('models', []) if plant_info.get('models', []) else base_models2
+
+                    cf["models"] = get_model_config(plant.model_path)
                     final_result.append(cf)
                     assigned.add(cpos)
 
 
+
+    vegetables = Plants.query.filter_by(show_type='蔬菜爬藤架').all()
+    # print(vegetables)
+    for vege in data["vegetablePositions"]:
+        vege_res = {}
+        vegetable = random.choice(vegetables)
+
+        vege_res["type"] = "可食"
+        vege_res["position"] = {}
+        vege_res["position"]["x"], vege_res["position"]["y"] = vege["x"], vege["y"]
+        vege_res['color'] = color_map.get(zone_type, "#FFFFFF")
+
+        vege_res["models"] = get_model_config(vegetable.model_path)
+        
+        plant_info = {
+            "id": vegetable.id,
+            "name": vegetable.name,
+            "latin_name": vegetable.latin_name,
+            "family": vegetable.family,
+            "genus": vegetable.genus,
+            "color": vegetable.color_hex,
+            'display_x': vege["x"],
+            'display_y': vege["y"],
+        }
+        vege_res["plant"] = plant_info
+        # vege_res["models"] = plant_info.get('models', []) if plant_info.get('models', []) else base_models
+        # print(f)
+        final_result.append(deepcopy(vege_res))
+
+    ornamentals = Plants.query.filter_by(show_type='观赏植物藤架').all()
+    # print(ornamentals)
+    # print(data["ornamentalPositions"])
+    for oran in data["ornamentalPositions"]:
+        oran_res = {}
+        ornamental = random.choice(ornamentals)
+
+        oran_res["type"] = "可食"
+        oran_res["position"] = {}
+        oran_res["position"]["x"], oran_res["position"]["y"] = oran["x"], oran["y"]
+        oran_res['color'] = color_map.get(zone_type, "#FFFFFF")
+
+        model_path = '../../frontend/public/models/' + ornamental.model_path + '/metadata.json'
+        # print(model_path)
+
+        with open(model_path, "r") as f:
+            model_config = json.load(f)
+            oran_res["models"] = model_config
+        
+        plant_info = {
+            "id": ornamental.id,
+            "name": ornamental.name,
+            "latin_name": ornamental .latin_name,
+            "family": ornamental.family,
+            "genus": ornamental.genus,
+            "color": ornamental.color_hex,
+            'display_x': oran["x"],
+            'display_y': oran["y"],
+        }
+        oran_res["plant"] = plant_info
+        # vege_res["models"] = plant_info.get('models', []) if plant_info.get('models', []) else base_models
+        # print(f)
+        final_result.append(deepcopy(oran_res))
+
+    # print(final_result)
+
+    return final_result
+
+
+def partition1(data):
+    import random, json, math
+    from copy import deepcopy
+    from sqlalchemy.dialects import sqlite
+
+    # 颜色映射
+    color_map = {
+        "全阴干": "#6BAF92",
+        "全阴湿": "#A88ED0",
+        "半日照干": "#F3A6B0",
+        "半日照湿": "#E58B4A",
+        "全日照干": "#FFD166",
+        "全日照湿": "#118AB2",
+    }
+
+    def get_neighbors(x, y, radius=1):
+        coords = []
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                if dx == 0 and dy == 0:
+                    continue
+                coords.append((x + dx, y + dy))
+        return coords
+
+    def get_model_config(model_path):
+        model_path = f'../../frontend/public/models/{model_path}/metadata.json'
+        with open(model_path, "r") as f:
+            return json.load(f)
+
+    # 阴影与湿地计算
+    shade_set, half_shade_set = set(), set()
+    for b in data["buildingPositions"]:
+        bx, by = math.ceil(b["x"]), math.ceil(b["y"])
+        shade_set.add((bx, by))
+        half_shade_set.update(get_neighbors(bx, by, radius=1))
+    for w in data["wallPositions"]:
+        wx, wy = math.ceil(w["x"]), math.ceil(w["y"])
+        shade_set.add((wx, wy))
+        half_shade_set.update(get_neighbors(wx, wy, radius=1))
+
+    wet_set = set()
+    for water in data["waterPositions"]:
+        wet_set.update(get_neighbors(water["x"], water["y"], radius=1))
+
+    # 区域分类
+    flower_zones = []
+    for f in data["flowerPositions"]:
+        pos = (f["x"], f["y"])
+        is_wet = pos in wet_set
+        if pos in shade_set:
+            light = "全阴"
+        elif pos in half_shade_set:
+            light = "半日照"
+        else:
+            light = "全日照"
+        wet_str = "湿" if is_wet else "干"
+        zone_type = f"{light}{wet_str}"
+        flower_zones.append({
+            "position": {"x": f["x"], "y": f["y"]},
+            "type": zone_type,
+            "color": color_map.get(zone_type, "#FFFFFF")
+        })
+
+    # 植物筛选
+    query = Plants.query.filter(
+        (Plants.show_type.is_(None)) | (Plants.show_type == ''),
+        Plants.model_path.isnot(None),
+        Plants.model_path != '',
+        ~Plants.name.in_(['葱', "羽衣甘蓝", "羽扇豆（鲁冰花）", "小花葱", "醉鱼草", "毛地黄", "大花飞燕草", "大花葱"])
+    )
+    print(query.statement.compile(dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}))
+    all_plants = query.all()
+
+    # 属性筛选
+    selectedPlants = data.get('property', {}).get("selectedPlants")
+    if selectedPlants:
+        all_plants = [p for p in all_plants if p.name in selectedPlants]
+
+    viewSeason = data.get('property', {}).get("viewSeason")
+    if viewSeason and viewSeason != 'none':
+        all_plants = [p for p in all_plants if match_season(viewSeason, p.ornamental_period)]
+
+    style = data.get('property', {}).get("style")
+    if style and style != 'none':
+        style_dic = {
+            "meadow": "混合草甸", "insectFriendly": "昆虫友好花园",
+            "rainGarden": "雨水花园", "children": "儿童花园",
+            "healing": "疗愈花园", "rock": "岩石花园",
+            "edible": "可食花园",
+        }
+        style = style_dic.get(style)
+        all_plants = [p for p in all_plants if style in p.garden_type.split("、")]
+
+    # 光照-湿度匹配
+    zone_query_map = {
+        "全阴干": {"sunlight": ["低"], "water_need": ["低"]},
+        "全阴湿": {"sunlight": ["低"], "water_need": ["高"]},
+        "半日照干": {"sunlight": ["中"], "water_need": ["低", "中", "中、低"]},
+        "半日照湿": {"sunlight": ["中"], "water_need": ["高", "中", "高、中"]},
+        "全日照干": {"sunlight": ["高"], "water_need": ["低"]},
+        "全日照湿": {"sunlight": ["高"], "water_need": ["高"]},
+    }
+
+    plants_by_zone = {z: [] for z in zone_query_map}
+    for plant in all_plants:
+        for zone_type, q in zone_query_map.items():
+            if (set(plant.sunlight.split("、")) & set(q["sunlight"])) and (plant.water_need in q["water_need"]):
+                plants_by_zone[zone_type].append(plant)
+
+    final_result = []
+
+    # ======================
+    # 🌱 主体：多植物生成逻辑
+    # ======================
+
+    def clustered_circle_packing(width, height, radii, padding=0.01, visualize=True):
+        """
+        在一个方格(width x height)内放置不同半径的圆
+        - radii: list[float]，每个圆的半径
+        - padding: 圆之间最小间距
+        - 相同半径圆尽量聚在一起
+        - 大圆在中心，小圆围绕大圆排列
+        - 返回: list of dict {x, y, r}
+        """
+        # Step1: 按半径聚类
+        from collections import defaultdict
+        clusters = defaultdict(list)
+        for r in radii:
+            print(r)
+            if r.crown_width:
+                clusters[int(r.crown_width)].append(r)
+        cluster_groups = sorted(clusters.keys(), reverse=True)  # 大->小
+
+        print(f"cluster_groups: {cluster_groups}")
+
+        placed = []
+        cx, cy = width / 2, height / 2  # 方格中心
+        last_layer_rmax = 0
+
+        # Step2: 按层放置
+        for idx, r_val in enumerate(cluster_groups):
+            current = clusters[r_val]
+            n = len(current)
+            if n == 0:
+                continue
+
+            if idx == 0:
+                # 最大圆放中心
+                placed.append({'x': cx, 'y': cy, 'r': r_val})
+                last_layer_rmax = r_val
+            else:
+                # 环半径
+                ring_r = last_layer_rmax + r_val + padding
+                angle_step = 2 * math.pi / n
+                for i in range(n):
+                    angle = i * angle_step + random.uniform(-0.05, 0.05)
+                    x = cx + math.cos(angle) * ring_r
+                    y = cy + math.sin(angle) * ring_r
+
+                    # 边界约束
+                    x = max(r_val, min(width - r_val, x))
+                    y = max(r_val, min(height - r_val, y))
+
+                    # 再次检查与已放置圆是否重叠
+                    overlap = False
+                    for p in placed:
+                        dx = x - p['x']
+                        dy = y - p['y']
+                        dist = math.sqrt(dx*dx + dy*dy)
+                        if dist < r_val + p['r'] + padding:
+                            overlap = True
+                            break
+                    if not overlap:
+                        placed.append({'x': x, 'y': y, 'r': r_val})
+
+                last_layer_rmax = ring_r + r_val  # 更新下一层半径
+
+        return placed
+    
+    # radii = candidates
+    print(all_plants)
+    
+    circles = clustered_circle_packing(10*50, 10*50, all_plants, padding=0.005)
+
+    print(circles)
+
+    
+    for f in flower_zones:
+        zone_type = f["type"]
+        candidates = plants_by_zone.get(zone_type, [])
+        if not candidates:
+            continue
+
+        f["plants"] = []  # 每个格子多个植物
+        num_plants = random.randint(1, 3)  # 每格 1~3 株
+        plant = random.choice(candidates)
+
+        for offset_x, offset_y in circles:
+            radius = int(plant.crown_width) / 2
+            plant_info = {
+                "id": plant.id,
+                "name": plant.name,
+                "latin_name": plant.latin_name,
+                "family": plant.family,
+                "genus": plant.genus,
+                "color": plant.color_hex or "#888",
+                "display_x": offset_x,
+                "display_y": offset_y,
+                "display_radius": radius,
+            }
+            f["plants"].append(plant_info)
+
+        # 每格共用模型配置（取第一株的模型）
+        f["models"] = get_model_config(plant.model_path)
+        final_result.append(f)
+
+
+    # ======================
+    # 🍅 蔬菜藤架
+    # ======================
+    vegetables = Plants.query.filter_by(show_type='蔬菜爬藤架').all()
+    for vege in data["vegetablePositions"]:
+        vegetable = random.choice(vegetables)
+        vege_res = {
+            "type": "可食",
+            "position": {"x": vege["x"], "y": vege["y"]},
+            "color": "#88CC88",
+            "plants": [{
+                "id": vegetable.id,
+                "name": vegetable.name,
+                "latin_name": vegetable.latin_name,
+                "family": vegetable.family,
+                "genus": vegetable.genus,
+                "color": vegetable.color_hex or "#888",
+                "display_x": vege["x"],
+                "display_y": vege["y"],
+                "display_radius": 28
+            }],
+            "models": get_model_config(vegetable.model_path)
+        }
+        final_result.append(vege_res)
+
+    # ======================
+    # 🌸 观赏植物藤架
+    # ======================
+    ornamentals = Plants.query.filter_by(show_type='观赏植物藤架').all()
+    for oran in data["ornamentalPositions"]:
+        ornamental = random.choice(ornamentals)
+        oran_res = {
+            "type": "观赏",
+            "position": {"x": oran["x"], "y": oran["y"]},
+            "color": "#CC88CC",
+            "plants": [{
+                "id": ornamental.id,
+                "name": ornamental.name,
+                "latin_name": ornamental.latin_name,
+                "family": ornamental.family,
+                "genus": ornamental.genus,
+                "color": ornamental.color_hex or "#888",
+                "display_x": oran["x"],
+                "display_y": oran["y"],
+                "display_radius": 28
+            }],
+            "models": get_model_config(ornamental.model_path)
+        }
+        final_result.append(oran_res)
 
     return final_result
 
@@ -779,11 +1078,46 @@ def partition(data):
 @app.route("/plants_data", methods=["POST"])
 def plants_data():
     data = request.json
-    print(data)
 
     data = partition(data)
+#     data = [
+#   {
+#     "cell": { "x": 0, "y": 0 },
+#     "plants": [
+#       {
+#         "id": 1,
+#         "name": "松果菊",
+#         "color": "#ffb347",
+#         "radius": 8,
+#         "offset_x": 0.3,
+#         "offset_y": 0.6
+#       },
+#       {
+#         "id": 2,
+#         "name": "蓝羊毛",
+#         "color": "#99ccff",
+#         "radius": 5,
+#         "offset_x": 0.7,
+#         "offset_y": 0.4
+#       }
+#     ]
+#   },
+#   {
+#     "cell": { "x": 1, "y": 2 },
+#     "plants": [
+#       {
+#         "id": 3,
+#         "name": "狼尾草",
+#         "color": "#a0e57c",
+#         "radius": 10,
+#         "offset_x": 0.5,
+#         "offset_y": 0.5
+#       }
+#     ]
+#   }
+# ]
 
-    # print(data)
+
 
     return jsonify({"success": True, "message": "获取模型配置成功", "data": data})
 
@@ -796,8 +1130,8 @@ def get_model_config():
 
 
     plants = Plants.query.all()
-    for plant in plants:
-        print(plant.name)
+    # for plant in plants:
+        # print(plant.name)
 
     model_config = [
         {
@@ -1074,7 +1408,7 @@ def save_pdf():
     body = request.get_json()
     images = body.get("images", [])
     plantlist = body.get("plantlist", [])
-    print(plantlist)
+    # print(plantlist)
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -1172,7 +1506,7 @@ plant_cache = {}
 
 def query_deepseek(name: str):
     if name in plant_cache:
-        print(f"缓存命中: {name}")
+        # print(f"缓存命中: {name}")
         return plant_cache[name]
 
     client = OpenAI(
@@ -1180,7 +1514,7 @@ def query_deepseek(name: str):
         base_url="https://api.deepseek.com"
     )
 
-    print(f"请求 DeepSeek: {name}")
+    # print(f"请求 DeepSeek: {name}")
 
     try:
         response = client.chat.completions.create(
@@ -1193,7 +1527,7 @@ def query_deepseek(name: str):
         )
         answer = response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"DeepSeek API 调用失败: {e}")
+        # print(f"DeepSeek API 调用失败: {e}")
         answer = "植物信息获取失败，请稍后再试。"
 
     # 写入缓存
