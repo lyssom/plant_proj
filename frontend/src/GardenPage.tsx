@@ -11,8 +11,11 @@ import * as THREE from 'three';
 import { ChevronRightIcon, MinusIcon } from '@chakra-ui/icons';
 import { getLocationMsg, computePlantsData, getPlants, savePdf, getPlantDetail } from './api';
 import { renderToStaticMarkup } from "react-dom/server";
-
+import ReactMarkdown from "react-markdown";
 import {
+  Heading,
+  ListItem,
+  UnorderedList,
   Box,
   Button,
   Slider,
@@ -57,6 +60,9 @@ import {
   Td,
   Divider
 } from "@chakra-ui/react";
+import {AlignedGrid} from "./AlignedGrid"
+
+import ObjectGLBModel from "./GlbLoader"
 
 
 
@@ -152,30 +158,39 @@ function ClickablePlane({
             (pos) => pos.x === x && pos.y === y
           );
 
+          const topColor = isFlower
+            ? "pink"
+            : isSelected
+            ? "green"
+            : isGreen
+            ? "limegreen"
+            : "white";
+
 
           return (
-            <mesh
-              key={key}
-              position={[x * CELL_SIZE, height / 2, y * CELL_SIZE]}
-              onClick={(e) => handleClickPosition(x, y, e)}
-              castShadow
-              receiveShadow
-            >
-              <boxGeometry args={[CELL_SIZE, height+0.01, CELL_SIZE]}/>
-              <meshStandardMaterial 
-              color={
-                  isFlower
-                    ? "pink" // ✅ 花朵格子
-                    : isSelected
-                    ? "green"
-                    : isGreen
-                    ? "limegreen"
-                    : "white"
-                }
-                  />
+          <group key={key} position={[x * CELL_SIZE, 0, y * CELL_SIZE]}>
+              {/* ✅ 立方体主体 */}
+              <mesh
+                position={[0, height / 2 - 0.5, 0]}
+                // onClick={(e) => handleClickPosition(x, y, e)}
+                castShadow
+                receiveShadow
+              >
+                <boxGeometry args={[CELL_SIZE, height + 1, CELL_SIZE]} />
+                <meshStandardMaterial color="gray" />
+              </mesh>
 
-                {/* <BoxGeometry position={[x * CELL_SIZE, height / 2, y * CELL_SIZE]} onClick={() => handleClickPosition(x, y)} color={isSelected ? "green" : isGreen ? "limegreen" : "white"} /> */}
-            </mesh>
+              {/* ✅ 顶层地表 */}
+              <mesh
+                position={[0, height, 0]}
+                onClick={(e) => handleClickPosition(x, y, e)}
+                castShadow
+                receiveShadow
+              >
+                <boxGeometry args={[CELL_SIZE, 0.05, CELL_SIZE]} />
+                <meshStandardMaterial color={topColor} />
+              </mesh>
+            </group>
           );
         })
       )}
@@ -217,6 +232,8 @@ type GardenDrawerProps = {
   setViewSeason: React.Dispatch<React.SetStateAction<string>>;
   selectedPlants: [];
   setSelectedPlants: React.Dispatch<React.SetStateAction<[]>>;
+  setOrnamentalPositions: React.Dispatch<React.SetStateAction<[]>>;
+  setVegetablePositions: React.Dispatch<React.SetStateAction<[]>>;
 };
 
 
@@ -293,7 +310,8 @@ export function GardenDrawer({
   svgElement, setSvgElement,
   setLatitude,setLongitude,
   province, setProvince, city, setCity,
-  style, setStyle, viewSeason, setViewSeason, selectedPlants, setSelectedPlants
+  style, setStyle, viewSeason, setViewSeason, selectedPlants, setSelectedPlants, 
+  setOrnamentalPositions, setVegetablePositions
 }: GardenDrawerProps) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [step, setStep] = useState(0);
@@ -330,6 +348,8 @@ export function GardenDrawer({
     water: "水面",
     tree: "乔木",
     terrain: "地形",
+    vegetable: "蔬菜爬藤架",
+    ornamental: "观赏植物藤架"
   };
 
 
@@ -341,20 +361,20 @@ export function GardenDrawer({
 
 
 
-  useEffect(() => {
-    const list = Object.values(
-      plantsData.reduce((acc, item) => {
-        const name = item.plant.name;
+  // useEffect(() => {
+  //   const list = Object.values(
+  //     plantsData.reduce((acc, item) => {
+  //       const name = item.plant.name;
 
-        if (!acc[name]) {
-          acc[name] = { name, count: 0 };
-        }
-        acc[name].count += 1;
-        return acc;
-      }, {} as Record<string, { name: string; count: number }>)
-    );
-    setPlantList(list);
-  }, [plantsData]);
+  //       if (!acc[name]) {
+  //         acc[name] = { name, count: 0 };
+  //       }
+  //       acc[name].count += 1;
+  //       return acc;
+  //     }, {} as Record<string, { name: string; count: number }>)
+  //   );
+  //   setPlantList(list);
+  // }, [plantsData]);
 
   return (
     <>
@@ -456,6 +476,10 @@ export function GardenDrawer({
                   <Button colorScheme="green" onClick={() => setMode('tree')}>乔木</Button>
                   <Button colorScheme="pink" onClick={() => setMode('terrain')}>地形</Button>
                 </HStack>
+                 <HStack spacing={4}>
+                  <Button colorScheme="gray" onClick={() => setMode('vegetable')}>蔬菜爬藤架</Button>
+                  <Button colorScheme="gray" onClick={() => setMode('ornamental')}>观赏植物藤架</Button>
+                 </HStack>
 
                 <VStack align="start" spacing={3}>
                     <Text fontSize="lg" fontWeight="bold" color="teal.600">
@@ -689,7 +713,7 @@ export function GardenDrawer({
                 <Button variant="ghost" mr={3} onClick={() => setStep(0)}>
                   上一步
                 </Button>
-                <Button colorScheme="blue" onClick={() => setStep(2)}>
+                <Button colorScheme="blue" onClick={() => {setStep(2);setMode('grass');}}>
                   下一步
                 </Button>
               </>
@@ -712,7 +736,8 @@ export function GardenDrawer({
                 </Button>
               <GardenModal 
               plantsData={plantsData} setPlantsData={setPlantsData} PositionDatas={PositionDatas} 
-              cells={cells} setLoaded={setLoaded} svgElement={svgElement} setSvgElement={setSvgElement}/>
+              cells={cells} setLoaded={setLoaded} svgElement={svgElement} setSvgElement={setSvgElement}
+              setOrnamentalPositions={setOrnamentalPositions} setVegetablePositions={setVegetablePositions}/>
               <Button colorScheme="blue" ml={3} onClick={() => setStep(4)}>
                 下一步
               </Button>
@@ -798,280 +823,325 @@ export function GardenDrawer({
 // }
 
 
-interface PlantModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  plantName: string;
-}
+// interface PlantModalProps {
+//   isOpen: boolean;
+//   onClose: () => void;
+//   plantName: string;
+// }
 
-const PlantModal: React.FC<PlantModalProps> = ({ isOpen, onClose, plantName }) => {
-  const [plantDetails, setPlantDetails] = useState<string>("");
+// const PlantModal: React.FC<PlantModalProps> = ({ isOpen, onClose, plantName }) => {
+//   const [plantDetails, setPlantDetails] = useState<string>("");
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchPlantDetails();
-    }
-  }, [isOpen]);
+//   useEffect(() => {
+//     if (isOpen) {
+//       fetchPlantDetails();
+//     }
+//   }, [isOpen]);
 
-  const fetchPlantDetails = async () => {
-    try {
-      setPlantDetails(""); // 每次打开先清空
-      const response = await getPlantDetail(plantName);
-      setPlantDetails(response.data.data);
-    } catch (err) {
-      console.log(err);
-      setPlantDetails("获取植物信息失败，请稍后再试。");
-    }
-  };
+//   const fetchPlantDetails = async () => {
+//     try {
+//       setPlantDetails(""); // 每次打开先清空
+//       const response = await getPlantDetail(plantName);
+//       setPlantDetails(response.data.data);
+//     } catch (err) {
+//       console.log(err);
+//       setPlantDetails("获取植物信息失败，请稍后再试。");
+//     }
+//   };
 
-  if (!isOpen) return null;
+//   if (!isOpen) return null;
 
-  return (
-    <Html>
-      <Box
-        p={5}
-        bg="white"
-        borderRadius="2xl"
-        border="2px solid"
-        borderColor="green.400"
-        boxShadow="lg"
-        minW="800px"
-        maxW="800px"
-        maxH="400px"         // 限制最大高度
-        overflowY="auto"     // 内容超过时出现滚动条
-        textAlign="left"
-        position="relative"
-      >
-        <Stack spacing={3}>
-          <Button
-            size="xs"
-            alignSelf="flex-end"
-            onClick={onClose}
-            variant="outline"
-            colorScheme="green"
-            borderRadius="full"
-          >
-            关闭
-          </Button>
+//   return (
+//     <Html center>
+//       <Box
+//         w="800px"
+//         maxH="400px"
+//         borderRadius="xl"
+//         overflow="hidden"
+//         boxShadow="2xl"
+//       >
+//         {/* 标题栏 */}
+//         <Flex
+//           bg="green"
+//           color="white"
+//           align="center"
+//           justify="space-between"
+//           px={4}
+//           py={2}
+//         >
+//           <Text fontSize="lg" fontWeight="bold">
+//             {plantName}
+//           </Text>
+//           <Button
+//             size="sm"
+//             variant="ghost"
+//             color="white"
+//             _hover={{ bg: "green" }}
+//             onClick={onClose}
+//           >
+//             ✕
+//           </Button>
+//         </Flex>
 
-          <Text fontSize="lg" fontWeight="bold" color="green.600">
-            {plantName}
-          </Text>
+//         {/* 正文 (Markdown 渲染) */}
+//         <Box
+//           bg="white"
+//           p={5}
+//           maxH="350px"
+//           overflowY="auto"
+//           textAlign="left"
+//           sx={{
+//             "&::-webkit-scrollbar": { width: "6px" },
+//             "&::-webkit-scrollbar-thumb": {
+//               background: "#68D391",
+//               borderRadius: "8px",
+//             },
+//           }}
+//         >
+//           <ReactMarkdown
+//             components={{
+//               h1: (props) => <Heading as="h1" size="lg" mb={3} {...props} />,
+//               h2: (props) => <Heading as="h2" size="md" mt={4} mb={2} {...props} />,
+//               h3: (props) => <Heading as="h3" size="sm" mt={3} mb={1} {...props} />,
+//               p: (props) => (
+//                 <Text fontSize="md" color="gray.700" mb={2} {...props} />
+//               ),
+//               ul: ({ children }) => (
+//                 <UnorderedList pl={5} spacing={1} mb={2}>
+//                   {children}
+//                 </UnorderedList>
+//               ),
+//             }}
+//           >
+//             {plantDetails || "🌱 智能生成植物详细信息中…"}
+//           </ReactMarkdown>
+//         </Box>
+//       </Box>
+//     </Html>
+//   );
+// };
 
-          <Text fontSize="sm" color="gray.600" whiteSpace="pre-wrap">
-            {plantDetails || "🌱 智能生成植物详细信息中…"}
-          </Text>
-        </Stack>
-      </Box>
 
-    </Html>
-  );
-};
+// function ObjectGLBModel({
+//   Reasource,
+//   name,
+//   position,
+//   upAxis,
+//   target,
+//   latinName,
+//   zhName,
+//   plant
+// }: {
+//   Reasource: string;
+//   name: string;
+//   position: [number, number, number];
+//   upAxis: string;
+//   target: [number, number, number];
+//   latinName: string;
+//   zhName: string;
+//   plant: any;
+// }) {
+//   const [obj, setObj] = useState<THREE.Object3D | null>(null);
+//   const ref = useRef<THREE.Object3D>(null!);
+//   const [hovered, setHovered] = useState(false);
+//   const [tooltipVisible, setTooltipVisible] = useState(false);
+//   const hideTimer = useRef<number>();
+//   const tooltipRef = useRef<HTMLDivElement>(null);
+//   const [modelSize, setModelSize] = useState<THREE.Vector3>(new THREE.Vector3(1, 1, 1));
+//   const [modalOpen, setModalOpen] = useState(false);
 
+//   useEffect(() => {
+//     const loader = new GLTFLoader();
+//     loader.setPath(Reasource);
+//     loader.load(`${name}`, (gltf) => {
+//       const model = gltf.scene;
 
-function ObjectGLBModel({
-  Reasource,
-  name,
-  position,
-  upAxis,
-  target,
-  latinName,
-  zhName,
-  plant
-}: {
-  Reasource: string;
-  name: string;
-  position: [number, number, number];
-  upAxis: string;
-  target: [number, number, number];
-  latinName: string;
-  zhName: string;
-  plant: any;
-}) {
-  const [obj, setObj] = useState<THREE.Object3D | null>(null);
-  const ref = useRef<THREE.Object3D>(null!);
-  const [hovered, setHovered] = useState(false);
-  const [tooltipVisible, setTooltipVisible] = useState(false);
-  const hideTimer = useRef<number>();
-  const tooltipRef = useRef<HTMLDivElement>(null);
-  const [modelSize, setModelSize] = useState<THREE.Vector3>(new THREE.Vector3(1, 1, 1));
-  const [modalOpen, setModalOpen] = useState(false);
+//       model.traverse((child: any) => {
+//         if (child.isMesh) {
+//           child.material.side = THREE.DoubleSide;
+//           child.material.needsUpdate = true;
+//           child.castShadow = true;
+//           child.receiveShadow = true;
+//         }
+//       });
 
-  useEffect(() => {
-    const loader = new GLTFLoader();
-    loader.setPath(Reasource);
-    loader.load(`${name}.glb`, (gltf) => {
-      const model = gltf.scene;
+//       // ========= 统一调整模型坐标系 =========
+//       if (upAxis === "z" || upAxis === "x") model.rotation.x = Math.PI / 2;
+//       else if (upAxis === "y") model.rotation.y = Math.PI / 2;
+//       else if (upAxis === "-z" || upAxis === "-x") model.rotation.x = -Math.PI / 2;
+//       else if (upAxis === "-y") model.rotation.y = -Math.PI / 2;
 
-      model.traverse((child: any) => {
-        if (child.isMesh) {
-          child.material.side = THREE.DoubleSide;
-          child.material.needsUpdate = true;
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
+//       // ========= 包装为 wrapper 以清除模型自身偏移 =========
+//       const wrapper = new THREE.Group();
+//       wrapper.add(model);
 
-      // 处理 upAxis
-      if (upAxis === "z" || upAxis === "x") model.rotation.x = Math.PI / 2;
-      else if (upAxis === "y") model.rotation.y = Math.PI / 2;
-      else if (upAxis === "-z" || upAxis === "-x") model.rotation.x = -Math.PI / 2;
-      else if (upAxis === "-y") model.rotation.y = -Math.PI / 2;
+//       // 关键：更新矩阵以便计算正确包围盒
+//       model.updateMatrixWorld(true);
+//       wrapper.updateMatrixWorld(true);
 
-      const box = new THREE.Box3().setFromObject(model);
-      model.position.y -= box.min.y; // 底部贴到 y=0
-      
-      // 获取模型尺寸用于定位悬浮框
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      setModelSize(size);
+//       // 计算包围盒
+//       const box = new THREE.Box3().setFromObject(model);
+//       const size = new THREE.Vector3();
+//       box.getSize(size);
+//       setModelSize(size);
 
-      setObj(model);
-    });
-  }, [Reasource, name, upAxis]);
+//       // 让模型底部中心对齐到 wrapper 原点（即外部 position）
+//       const bottomY = box.min.y;
+//       const centerXZ = new THREE.Vector3();
+//       box.getCenter(centerXZ);
 
-  const phaseOffset = useMemo(() => Math.random() * Math.PI * 2, []); // 每株不同
+//       model.position.x -= centerXZ.x;
+//       model.position.y -= bottomY;
+//       model.position.z -= centerXZ.z;
 
-  useFrame(({ clock }) => {
-    if (ref.current) {
-      ref.current.scale.x = Math.min(ref.current.scale.x + 0.01, target[0]);
-      ref.current.scale.y = Math.min(ref.current.scale.y + 0.01, target[1]);
-      ref.current.scale.z = Math.min(ref.current.scale.z + 0.01, target[2]);
+//       // 更新一次矩阵
+//       model.updateMatrixWorld(true);
 
-      const t = clock.getElapsedTime();
-      const sway = Math.sin(t * 1.5 + phaseOffset) * 0.1;
-      const tilt = Math.cos(t * 1.2 + phaseOffset) * 0.15;
+//       setObj(wrapper);
+//     });
+//   }, [Reasource, name, upAxis]);
 
-      ref.current.rotation.z = sway;
-      ref.current.rotation.x = tilt;
-    }
-  });
+//   // 每株植物的随机相位
+//   const phaseOffset = useMemo(() => Math.random() * Math.PI * 2, []);
 
-  const handleMoreInfo = (plant: any, e: React.MouseEvent) => {
-    e.stopPropagation();
-    console.log(66666666666666);
-    setModalOpen(true);
-  };
+//   useFrame(({ clock }) => {
+//     if (ref.current) {
+//       ref.current.scale.x = Math.min(ref.current.scale.x + 0.01, target[0]);
+//       ref.current.scale.y = Math.min(ref.current.scale.y + 0.01, target[1]);
+//       ref.current.scale.z = Math.min(ref.current.scale.z + 0.01, target[2]);
 
-  const handleCloseModal = () => {
-    setModalOpen(false);
-  };
+//       const t = clock.getElapsedTime();
+//       const sway = Math.sin(t * 1.5 + phaseOffset) * 0.01;
+//       const tilt = Math.cos(t * 1.2 + phaseOffset) * 0.015;
 
-  const handlePointerOver = (e: any) => {
-    e.stopPropagation();
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-    setHovered(true);
-    setTooltipVisible(true);
-  };
+//       ref.current.rotation.z = sway;
+//       ref.current.rotation.x = tilt;
+//     }
+//   });
 
-  const handlePointerOut = (e: any) => {
-    e.stopPropagation();
-    // 只有当鼠标离开整个group时才隐藏
-    if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) {
-      hideTimer.current = window.setTimeout(() => {
-        setHovered(false);
-        setTooltipVisible(false);
-      }, 400);
-    }
-  };
+//   const handleMoreInfo = (plant: any, e: React.MouseEvent) => {
+//     e.stopPropagation();
+//     setModalOpen(true);
+//   };
 
-  const handleTooltipClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    // 阻止tooltip点击事件触发pointerout
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-  };
+//   const handleCloseModal = () => setModalOpen(false);
 
-  if (!obj) return null;
+//   const handlePointerOver = (e: any) => {
+//     e.stopPropagation();
+//     if (hideTimer.current) clearTimeout(hideTimer.current);
+//     setHovered(true);
+//     setTooltipVisible(true);
+//   };
 
-  return (
-    <group onPointerOver={handlePointerOver} onPointerOut={handlePointerOut}>
-      <primitive ref={ref} object={obj} position={position} scale={[1, 1, 1]} />
-      {hovered && (
-        <Html
-          distanceFactor={10}
-          style={{ 
-            pointerEvents: 'auto',
-            transform: 'translate(-50%, -100%)', // 居中并上移
-            marginTop: '-10px' // 额外上移一些
-          }}
-          position={[position[0], position[1] + modelSize.y / 2 + 0.5, position[2]]} // 在模型上方
-          onClick={handleTooltipClick}
-          ref={tooltipRef}
-        >
-          <div
-            style={{
-              background: 'white',
-              color: '#2D3748',
-              padding: '16px',
-              borderRadius: '8px',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-              pointerEvents: 'auto',
-              zIndex: 1000,
-              minWidth: '220px',
-              border: '1px solid #E2E8F0',
-              fontFamily: 'system-ui, sans-serif'
-            }}
-          >
-            <p style={{ margin: '0 0 8px 0', fontSize: '14px', lineHeight: '1.4' }}>
-              <b style={{ color: '#2D3748' }}>名称：</b>
-              <span style={{ color: '#4A5568' }}>{zhName}</span>
-            </p>
-            <p style={{ margin: '0 0 12px 0', fontSize: '14px', lineHeight: '1.4' }}>
-              <b style={{ color: '#2D3748' }}>拉丁名：</b>
-              <span style={{ color: '#4A5568', fontStyle: 'italic' }}>{latinName}</span>
-            </p>
-            <button
-              style={{
-                fontSize: '12px',
-                marginTop: '8px',
-                padding: '8px 16px',
-                backgroundColor: '#3182CE',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontWeight: '500',
-                width: '100%',
-                transition: 'background-color 0.2s'
-              }}
-              onMouseOver={(e) => e.stopPropagation()}
-              onClick={(e) => handleMoreInfo(plant, e)}
-              onMouseEnter={() => {
-                if (hideTimer.current) clearTimeout(hideTimer.current);
-              }}
-              onMouseLeave={() => {
-                hideTimer.current = window.setTimeout(() => {
-                  setHovered(false);
-                  setTooltipVisible(false);
-                }, 400);
-              }}
-            >
-              获取更多信息
-            </button>
-            
-            {/* 小箭头指示器 */}
-            <div style={{
-              position: 'absolute',
-              bottom: '-8px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: '0',
-              height: '0',
-              borderLeft: '8px solid transparent',
-              borderRight: '8px solid transparent',
-              borderTop: '8px solid white'
-            }} />
-          </div>
-        </Html>
-      )}
-      <PlantModal
-        isOpen={modalOpen}
-        onClose={handleCloseModal}
-        plantName={zhName}
-      />
-    </group>
-  );
-}
+//   const handlePointerOut = (e: any) => {
+//     e.stopPropagation();
+//     if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) {
+//       hideTimer.current = window.setTimeout(() => {
+//         setHovered(false);
+//         setTooltipVisible(false);
+//       }, 400);
+//     }
+//   };
+
+//   const handleTooltipClick = (e: React.MouseEvent) => {
+//     e.stopPropagation();
+//     if (hideTimer.current) clearTimeout(hideTimer.current);
+//   };
+
+//   if (!obj) return null;
+
+//   return (
+//     <group onPointerOver={handlePointerOver} onPointerOut={handlePointerOut}>
+//       {/* 模型包裹组：外部 position 精确控制世界位置 */}
+//       <primitive ref={ref} object={obj} position={position} scale={[1, 1, 1]} />
+
+//       {/* 悬浮信息框 */}
+//       {hovered && (
+//         <Html
+//           distanceFactor={10}
+//           style={{
+//             pointerEvents: "auto",
+//             transform: "translate(-50%, -100%)",
+//             marginTop: "-10px",
+//           }}
+//           position={[position[0], position[1] + modelSize.y + 0.5, position[2]]}
+//           onClick={handleTooltipClick}
+//           ref={tooltipRef}
+//         >
+//           <div
+//             style={{
+//               background: "white",
+//               color: "#2D3748",
+//               padding: "16px",
+//               borderRadius: "8px",
+//               boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+//               pointerEvents: "auto",
+//               zIndex: 1000,
+//               minWidth: "220px",
+//               border: "1px solid #E2E8F0",
+//               fontFamily: "system-ui, sans-serif",
+//               position: "relative",
+//             }}
+//           >
+//             <p style={{ margin: "0 0 8px 0", fontSize: "14px" }}>
+//               <b>名称：</b>
+//               <span style={{ color: "#4A5568" }}>{zhName}</span>
+//             </p>
+//             <p style={{ margin: "0 0 12px 0", fontSize: "14px" }}>
+//               <b>拉丁名：</b>
+//               <span style={{ color: "#4A5568", fontStyle: "italic" }}>{latinName}</span>
+//             </p>
+//             <button
+//               style={{
+//                 fontSize: "12px",
+//                 marginTop: "8px",
+//                 padding: "8px 16px",
+//                 backgroundColor: "#3182CE",
+//                 color: "white",
+//                 border: "none",
+//                 borderRadius: "6px",
+//                 cursor: "pointer",
+//                 fontWeight: "500",
+//                 width: "100%",
+//                 transition: "background-color 0.2s",
+//               }}
+//               onClick={(e) => handleMoreInfo(plant, e)}
+//               onMouseEnter={() => {
+//                 if (hideTimer.current) clearTimeout(hideTimer.current);
+//               }}
+//               onMouseLeave={() => {
+//                 hideTimer.current = window.setTimeout(() => {
+//                   setHovered(false);
+//                   setTooltipVisible(false);
+//                 }, 400);
+//               }}
+//             >
+//               获取更多信息
+//             </button>
+
+//             {/* 小箭头 */}
+//             <div
+//               style={{
+//                 position: "absolute",
+//                 bottom: "-8px",
+//                 left: "50%",
+//                 transform: "translateX(-50%)",
+//                 width: "0",
+//                 height: "0",
+//                 borderLeft: "8px solid transparent",
+//                 borderRight: "8px solid transparent",
+//                 borderTop: "8px solid white",
+//               }}
+//             />
+//           </div>
+//         </Html>
+//       )}
+
+//       {/* 弹出详情 */}
+//       <PlantModal isOpen={modalOpen} onClose={handleCloseModal} plantName={zhName} />
+//     </group>
+//   );
+// }
 
 
 
@@ -1436,7 +1506,7 @@ interface Plant {
 // ];
 
 export function GardenModal(
-  {plantsData, setPlantsData, PositionDatas, cells, setLoaded, svgElement,setSvgElement}: 
+  {plantsData, setPlantsData, PositionDatas, cells, setLoaded, svgElement,setSvgElement, setOrnamentalPositions, setVegetablePositions}: 
   {
     plantsData: Plant[], 
     setPlantsData: React.Dispatch<React.SetStateAction<Plant[]>>, 
@@ -1445,6 +1515,8 @@ export function GardenModal(
     setLoaded: React.Dispatch<React.SetStateAction<boolean>>,
     svgElement: JSX.Element
     setSvgElement: React.Dispatch<React.SetStateAction<JSX.Element>>,
+    setOrnamentalPositions:React.Dispatch<React.SetStateAction<[]>>,
+    setVegetablePositions:React.Dispatch<React.SetStateAction<[]>>
   }
 ) {
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -1481,14 +1553,18 @@ export function GardenModal(
   );
 
 
+
   
   function handleLoadGarden() {
+    setVegetablePositions([]);
+    setOrnamentalPositions([]);
     setLoaded(true);
     onClose()
   }
 
 
-  useEffect(() => {
+
+    useEffect(() => {
     setSvgElement(
       <svg
         width={600}
@@ -1561,6 +1637,7 @@ export function GardenModal(
     );
 
   }, [plantsData]);
+  
 
   return (
     <>
@@ -1640,6 +1717,13 @@ export function GardenPage() {
   // const [modelConfig, setModelConfig] = useState<any[]>([]);
   const [waterPositions, setWaterPositions] = useState<{x: number; y: number}[]>([]);
   const [treePositions, setTreePositions] = useState<
+      { x: number; y: number; width: number; height: number }[]
+    >([]);
+
+  const [ornamentalPositions, setOrnamentalPositions] = useState<
+      { x: number; y: number; width: number; height: number }[]
+    >([]);
+  const [vegetablePositions, setVegetablePositions] = useState<
       { x: number; y: number; width: number; height: number }[]
     >([]);
 
@@ -1829,7 +1913,14 @@ export function GardenPage() {
     } else if (mode === "tree") {
       setTreePositions([...treePositions,
         { x, y, width: treeWidth, height: treeHeight }]);
-    } else if (mode === "flower") {
+    } 
+    else if (mode === "ornamental") {
+      setOrnamentalPositions([...ornamentalPositions,
+        { x, y, width: 1.5, height: 2 }]);
+    }else if (mode === "vegetable") {
+      setVegetablePositions([...vegetablePositions,
+        { x, y, width: 1.5, height: 2 }]);
+    }else if (mode === "flower") {
       setFlowerPositions(prev => {
         const exists = prev.some(pos => pos.x === x && pos.y === y);
         if (!exists) {
@@ -1878,7 +1969,7 @@ export function GardenPage() {
 
     // 5类已占用格子
     const occupied = new Set(
-      [...waterPositions, ...buildingPositions, ...wallPositions, ...treePositions, ...objectPositions]
+      [...waterPositions, ...buildingPositions, ...wallPositions, ...treePositions, ...objectPositions, ...ornamentalPositions, ...vegetablePositions]
         .map(pos => `${pos.x}-${pos.y}`)
     );
 
@@ -1905,6 +1996,8 @@ export function GardenPage() {
     "wallPositions": wallPositions,
     "treePositions": treePositions,
     "objectPositions": objectPositions,
+    "ornamentalPositions": ornamentalPositions,
+    "vegetablePositions": vegetablePositions,
     "property": {
       "style": style,
       "viewSeason": viewSeason,
@@ -1922,6 +2015,29 @@ export function GardenPage() {
 
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
+{/* 在 Canvas 上方添加图片 */}
+    <div style={{
+      position: 'absolute',
+      top: '20px',
+      left: '20px',
+      zIndex: 1000,
+      background: 'rgba(255, 255, 255, 0.8)',
+      borderRadius: '8px',
+      padding: '8px',
+      // boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+    }}>
+      <img 
+        src="/logo_big.jpg" // 替换为你的图片路径
+        alt="Logo" 
+        style={{ 
+          width: '180px', 
+          height: '180px', 
+          objectFit: 'contain',
+          display: 'block'
+        }} 
+      />
+    </div>
+
       <Canvas ref={canvasRef} camera={{ position: [10, 10, 10], fov: 50 }} shadows style={{ width: '100%', height: '100%' }} gl={{ preserveDrawingBuffer: true }}>
         <ambientLight intensity={0.6} />
         <DirectionalSun latitude={latitude} longitude={longitude} date={date} />
@@ -1931,9 +2047,9 @@ export function GardenPage() {
           receiveShadow
         ></mesh>
         <group position={GROUP_OFFSET}>
-        <Grid
+        {/* <Grid
           // 宽度 = 行数 × CELL_SIZE，高度 = 列数 × CELL_SIZE
-          args={[100, 100, 100, 100]}
+          args={[rows, cols, 10, 10]}
           cellSize={CELL_SIZE}
           cellColor={'#a9a9a9'}
           sectionColor={'#a9a9a9'}
@@ -1942,7 +2058,14 @@ export function GardenPage() {
           fadeDistance={100}
           position={[HALF_X - offsetY, 0.02, HALF_Y - offsetX]}
           // position={[HALF_X, 0.02, HALF_Y]}
-        />
+        /> */}
+        <AlignedGrid
+        rows={cols}
+        cols={rows}
+        cellSize={CELL_SIZE}
+        color="#a9a9a9"
+        position={[-0.5, 0.02, -0.5]}
+      />
         <ClickablePlane onClick={handleCellClick} cells={cells} mode={mode} terrainHeight={terrainHeight} flowerPositions={flowerPositions} setWallPositions={setWallPositions}/>
 
         {loaded &&
@@ -1990,7 +2113,7 @@ export function GardenPage() {
                             zhName={plantCfg.plant.name}
                             position={pos}
                             upAxis={m.upAxis}
-                            target={[m.target, m.target, m.target]}
+                            target={[m.target[0], m.target[2], m.target[1]]}
                           />
                         ))
                       )}
@@ -2026,8 +2149,31 @@ export function GardenPage() {
           {treePositions.map(({ x, y, width, height }, i) => (
             <ObjectGLBModel
               key={`tree-${i}`}
-              Reasource={"/models/tree/"}
-              name={"tree"}
+              Reasource={"/models/base_model/"}
+              name={"tree.glb"}
+              position={[x * CELL_SIZE, 0, y * CELL_SIZE]}
+              upAxis={''}
+              target={[width, height, width]}
+            />
+          ))}
+
+
+          {ornamentalPositions.map(({ x, y, width, height }, i) => (
+            <ObjectGLBModel
+              key={`Ornamental-${i}`}
+              Reasource={"/models/base_model/"}
+              name={"ornamental.glb"}
+              position={[x * CELL_SIZE, 0, y * CELL_SIZE]}
+              upAxis={''}
+              target={[width, height, width]}
+            />
+          ))}
+
+          {vegetablePositions.map(({ x, y, width, height }, i) => (
+            <ObjectGLBModel
+              key={`Vegetable-${i}`}
+              Reasource={"/models/base_model/"}
+              name={"vegetable.glb"}
               position={[x * CELL_SIZE, 0, y * CELL_SIZE]}
               upAxis={''}
               target={[width, height, width]}
@@ -2088,6 +2234,8 @@ export function GardenPage() {
         setViewSeason={setViewSeason}
         selectedPlants={selectedPlants}
         setSelectedPlants={setSelectedPlants}
+        setOrnamentalPositions={setOrnamentalPositions}
+        setVegetablePositions={setVegetablePositions}
         />
       </Box>
     </div>

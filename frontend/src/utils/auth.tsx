@@ -17,9 +17,9 @@ export function saveUser(username: string) {
 }
 
 export function getUser(): string | null {
-    console.log(66666)
-    console.log(localStorage.getItem("username"));
-    console.log(66666111)
+    // console.log(66666)
+    // console.log(localStorage.getItem("username"));
+    // console.log(66666111)
   return localStorage.getItem("username");
 }
 

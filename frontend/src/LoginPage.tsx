@@ -1,4 +1,4 @@
-import { Box, Input, Button, Stack, Heading, Text, Link, useToast } from '@chakra-ui/react';
+import { Box, Input, Button, Stack, Heading, Text, Link, useToast, Image } from '@chakra-ui/react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from './api';
@@ -63,7 +63,17 @@ export function LoginPage() {
   };
 
   return (
-    <Box maxW="sm" mx="auto" mt="20">
+    <Box maxW="sm" mx="auto" mt="10">
+      {/* 添加图片 */}
+      <Image
+        src="/logo_big.jpg" // 替换为你的图片路径
+        alt="Logo"
+        mx="auto"
+        mb="6"
+        boxSize="300px" // 调整图片大小
+        objectFit="contain"
+      />
+      
       <Heading mb="6" textAlign="center">登录</Heading>
       <Stack spacing="4">
         <Input
