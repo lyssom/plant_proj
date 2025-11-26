@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useRef, useState, useEffect, useMemo, use } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader';
@@ -63,6 +63,7 @@ import {
 import {AlignedGrid} from "./AlignedGrid"
 
 import ObjectGLBModel from "./GlbLoader"
+import {Compass} from "./Compass"
 
 
 
@@ -1772,6 +1773,7 @@ export function GardenPage() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+
   function svgToPng(svgElement: SVGSVGElement, width = 600, height = 600): Promise<Blob> {
     return new Promise((resolve, reject) => {
       try {
@@ -1939,6 +1941,20 @@ export function GardenPage() {
     setIsPlaying(!isPlaying);
   };
 
+  function CameraController({ setCurrentRotation }) {
+  const controlsRef = useRef(null);
+  const { camera } = useThree();
+
+  useFrame(() => {
+    // 计算相机水平旋转角度
+    const angle = Math.atan2(camera.position.x, camera.position.z) * (180 / Math.PI);
+    setCurrentRotation(angle); // 更新指北针状态
+  });
+
+  return <OrbitControls ref={controlsRef} enablePan enableZoom enableRotate />;
+}
+
+
     // 每秒更新时间
   useEffect(() => {
     const id = setInterval(() => setDate(new Date()), 1000);
@@ -2019,7 +2035,7 @@ export function GardenPage() {
     <div style={{
       position: 'absolute',
       top: '20px',
-      left: '20px',
+      left: '45%',
       zIndex: 1000,
       background: 'rgba(255, 255, 255, 0.8)',
       borderRadius: '8px',
@@ -2036,6 +2052,9 @@ export function GardenPage() {
           display: 'block'
         }} 
       />
+    </div>
+    <div style={{ position: 'absolute', top: 20, right: 20, zIndex: 1000 }}>
+      <Compass rotation={currentRotation} size={80} />
     </div>
 
       <Canvas ref={canvasRef} camera={{ position: [10, 10, 10], fov: 50 }} shadows style={{ width: '100%', height: '100%' }} gl={{ preserveDrawingBuffer: true }}>
@@ -2066,6 +2085,7 @@ export function GardenPage() {
         color="#a9a9a9"
         position={[-0.5, 0.02, -0.5]}
       />
+      <CameraController setCurrentRotation={setCurrentRotation} />
         <ClickablePlane onClick={handleCellClick} cells={cells} mode={mode} terrainHeight={terrainHeight} flowerPositions={flowerPositions} setWallPositions={setWallPositions}/>
 
         {loaded &&
