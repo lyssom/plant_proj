@@ -312,6 +312,31 @@ export function ObjectGLBModel({
       if (!mounted) return;
       const model = gltf.scene.clone(true);
 
+      model.traverse((child: any) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+
+          // ⭐ 保留原材质，只补充 Shadow 所需属性
+          if (child.material) {
+            child.material.side = THREE.DoubleSide;
+
+            // 如果是透明贴图的植物材质
+            child.material.alphaTest = 0.4;     // ⭐ 植物阴影的关键
+            child.material.transparent = true;
+
+            // 阴影优化参数
+            child.material.depthWrite = true;
+            child.material.needsUpdate = true;
+          }
+
+          // 阴影方向
+          child.shadowSide = THREE.FrontSide;
+        }
+      });
+
+
+
       // === 偏移校正逻辑 ===
       const wrapper = new THREE.Group();
       wrapper.add(model);
@@ -338,7 +363,7 @@ export function ObjectGLBModel({
 
   // ✅ 动画（风动效果）
   useFrame(({ clock }) => {
-    console.log(target)
+    // console.log(target)
     const t = clock.getElapsedTime();
     if (ref.current) {
       ref.current.rotation.z = Math.sin(t * 1.5) * 0.01;

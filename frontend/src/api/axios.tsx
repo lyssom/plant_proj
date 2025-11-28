@@ -1,6 +1,7 @@
 import axios from "axios"
 
-const baseUrl = "http://localhost:5000"
+// const baseUrl = "http://121.196.227.3:5000"
+const baseUrl = "http://127.0.0.1:5000"
 
 class HttpRequest {
   baseUrl: string;

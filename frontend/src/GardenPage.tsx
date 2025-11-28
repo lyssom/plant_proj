@@ -362,20 +362,20 @@ export function GardenDrawer({
 
 
 
-  // useEffect(() => {
-  //   const list = Object.values(
-  //     plantsData.reduce((acc, item) => {
-  //       const name = item.plant.name;
+  useEffect(() => {
+    const list = Object.values(
+      plantsData.reduce((acc, item) => {
+        const name = item.plant.name;
 
-  //       if (!acc[name]) {
-  //         acc[name] = { name, count: 0 };
-  //       }
-  //       acc[name].count += 1;
-  //       return acc;
-  //     }, {} as Record<string, { name: string; count: number }>)
-  //   );
-  //   setPlantList(list);
-  // }, [plantsData]);
+        if (!acc[name]) {
+          acc[name] = { name, count: 0 };
+        }
+        acc[name].count += 1;
+        return acc;
+      }, {} as Record<string, { name: string; count: number }>)
+    );
+    setPlantList(list);
+  }, [plantsData]);
 
   return (
     <>
@@ -610,14 +610,15 @@ export function GardenDrawer({
                   onChange={(e) => setStyle(e.target.value)}
                   width="100%"
                 >
-                  <option value="none">无明确风格</option>
-                  <option value="meadow">混合草甸</option>
-                  <option value="insectFriendly">昆虫友好花园</option>
-                  <option value="rainGarden">雨水花园</option>
-                  <option value="children">儿童花园</option>
-                  <option value="healing">疗愈花园</option>
-                  <option value="rock">岩石花园</option>
+                  <option value="no_style">无明确风格</option>
+                  <option value="rock">岩石园</option>
+                  <option value="insect">昆虫友好花园</option>
                   <option value="edible">可食花园</option>
+                  <option value="meadow">混合草甸花园</option>
+                  <option value="rain_garden">雨水花园</option>
+                  <option value="healing">疗愈花园</option>
+                  <option value="scent_garden">芳香花园</option>
+                  <option value="none">零维护花园</option>
                 </Select>
               </Box>
 
@@ -1566,6 +1567,19 @@ export function GardenModal(
 
 
     useEffect(() => {
+
+      const cellMap: Record<string, any[]> = {};
+
+      plantsData.forEach((plant) => {
+        const key = `${plant.position.x}-${plant.position.y}`;
+        if (!cellMap[key]) cellMap[key] = [];
+        cellMap[key].push(plant);
+      });
+
+      const totalSize = 600;
+      const [cols, rows] = cells;
+      const SvgcellSize = totalSize / Math.max(cols, rows);
+      
     setSvgElement(
       <svg
         width={600}
@@ -1573,7 +1587,7 @@ export function GardenModal(
         style={{ border: "1px solid #ccc", background: "#fdfdfd" }}
       >
         {/* 1. 先绘制格子 */}
-        {Array.from({ length: cells[0] }).map((_, i) =>
+        {/* {Array.from({ length: cells[0] }).map((_, i) =>
           Array.from({ length: cells[1] }).map((_, j) => (
             <rect
               key={`cell-${i}-${j}`}
@@ -1585,28 +1599,41 @@ export function GardenModal(
               stroke="#ddd"
             />
           ))
-        )}
+        )} */}
 
         {/* 2. 绘制植物的圆 */}
 
-        {plantsData.map((plant, idx) => {
-          const x = plant.position.x * cellSize;
-          const y = plant.position.y * cellSize;
+      {Object.entries(cellMap).map(([key, plants]) => {
+          const [gx, gy] = key.split("-").map(Number);
+
+          const x = gx * SvgcellSize;
+          const y = gy * SvgcellSize;
+
+          // 格子的颜色：可按需调整，这里用第一个植物的颜色
+          const color = plants[0].color || "#eee";
 
           return (
-            <rect x={x} y={y} width={cellSize} height={cellSize} fill={plant.color || "#eee"} opacity={0.3}/>
+            <rect
+              key={`cell-${key}`}
+              x={x}
+              y={y}
+              width={SvgcellSize}
+              height={SvgcellSize}
+              fill={color}
+              opacity={0.3}
+            />
           );
         })}
         {plantsData.map((plant, idx) => {
-          const plant_x = plant.plant.display_x * cellSize;
-          const plant_y = plant.plant.display_y * cellSize;
+          const plant_x = plant.plant.display_x * SvgcellSize;
+          const plant_y = plant.plant.display_y * SvgcellSize;
 
           return (
             <circle
               key={`circle-${idx}`}
-              cx={plant_x + cellSize / 2}
-              cy={plant_y + cellSize / 2}
-              r={plant.plant.display_radius}
+              cx={plant_x + SvgcellSize / 2}
+              cy={plant_y + SvgcellSize / 2}
+              r={plant.plant.display_radius*SvgcellSize/60}
               fill={plant.plant.color}
               opacity={0.7}
             />
@@ -1615,14 +1642,14 @@ export function GardenModal(
 
         {/* 3. 最后绘制文字（保证永远在最上层） */}
         {plantsData.map((plant, idx) => {
-          const plant_x = plant.plant.display_x * cellSize;
-          const plant_y = plant.plant.display_y * cellSize;
+          const plant_x = plant.plant.display_x * SvgcellSize;
+          const plant_y = plant.plant.display_y * SvgcellSize;
 
           return (
             <text
               key={`text-${idx}`}
-              x={plant_x + cellSize / 2}
-              y={plant_y + cellSize / 2}
+              x={plant_x + SvgcellSize / 2}
+              y={plant_y + SvgcellSize / 2}
               fontSize="16"
               textAnchor="middle"
               fill="#000"
@@ -1630,7 +1657,7 @@ export function GardenModal(
               strokeWidth={2}
               dominantBaseline="middle"
             >
-              {plant.plant.name}
+              .
             </text>
           );
         })}
@@ -1848,7 +1875,7 @@ export function GardenPage() {
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
       const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-      await sleep(2000);
+      await sleep(20000);
 
       const dataURL = canvasRef.current.toDataURL("image/png");
       const payload = { filename: `${s}.png`, data: dataURL.split(",")[1] };
@@ -2018,7 +2045,9 @@ export function GardenPage() {
       "style": style,
       "viewSeason": viewSeason,
       "selectedPlants": selectedPlants,
-      "lat": latitude,
+      // "lat": latitude,
+      "city": city,
+      "province": province
     }
   }
 
@@ -2078,13 +2107,13 @@ export function GardenPage() {
           position={[HALF_X - offsetY, 0.02, HALF_Y - offsetX]}
           // position={[HALF_X, 0.02, HALF_Y]}
         /> */}
-        <AlignedGrid
+        {/* <AlignedGrid
         rows={cols}
         cols={rows}
         cellSize={CELL_SIZE}
         color="#a9a9a9"
         position={[-0.5, 0.02, -0.5]}
-      />
+      /> */}
       <CameraController setCurrentRotation={setCurrentRotation} />
         <ClickablePlane onClick={handleCellClick} cells={cells} mode={mode} terrainHeight={terrainHeight} flowerPositions={flowerPositions} setWallPositions={setWallPositions}/>
 
