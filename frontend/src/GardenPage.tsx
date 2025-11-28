@@ -1633,7 +1633,7 @@ export function GardenModal(
               key={`circle-${idx}`}
               cx={plant_x + SvgcellSize / 2}
               cy={plant_y + SvgcellSize / 2}
-              r={plant.plant.display_radius*SvgcellSize/60}
+              r={plant.plant.display_radius*SvgcellSize/40}
               fill={plant.plant.color}
               opacity={0.7}
             />

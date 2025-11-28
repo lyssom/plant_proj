@@ -3,3 +3,4 @@ backend/data
 release
 frontend/public
 sftp.json
+frontend/models

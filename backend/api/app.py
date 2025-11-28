@@ -848,7 +848,7 @@ def partition6667(data):
 
     
     print("第一株摆放完成")
-    def other_plants(cluster_count=2):
+    def other_plants(cluster_count=2, max_crown_width=100, min_crown_width=0):
         second_result = []
 
         for f in final_result:
@@ -867,7 +867,7 @@ def partition6667(data):
             # 找所有更小植物
             candidates = [
                 p for p in plants_by_zone[f["type"]]
-                if float(p.crown_width) / 2 < center_r and float(p.crown_width) > 10
+                if float(p.crown_width) / 2 <= center_r and (float(p.crown_width) >= min_crown_width and float(p.crown_width) <= max_crown_width)
             ]
 
             if not candidates:
@@ -919,10 +919,10 @@ def partition6667(data):
         return second_result
 
 
-
-
-
-    second_result = other_plants()
+    # second_result = other_plants(min_crown_width=20)
+    second_result = other_plants(cluster_count=3, min_crown_width=20)
+    if style == "edible":
+        second_result += other_plants(cluster_count=10, max_crown_width=30, min_crown_width=0)
 
     # for f in final_result:
     #     pos = (f["position"]["x"], f["position"]["y"])
@@ -959,19 +959,20 @@ def partition6667(data):
 
     final_result += second_result
 
-    final_result = cleaned(final_result)
+    final_result = cleaned(final_result,touch_limited=True)
+    # final_result += other_plants(cluster_count=2, min_crown_width=20)
     fix_plant_zone(final_result)
     final_result = cleaned(final_result)
 
 
     for item in final_result:
-        print(item['position']['x'], item['position']['y'], item['plant']['display_x'], item['plant']['display_y'])
+        # print(item['position']['x'], item['position']['y'], item['plant']['display_x'], item['plant']['display_y'])
         if item.get('plant') and (not (item['position']['x'] - 0.5 <= item['plant']['display_x'] <= item['position']['x'] + 0.5)):
-            print("删除因x不在种植区:", item['plant']['name'])
+            # print("删除因x不在种植区:", item['plant']['name'])
             if item in final_result:  
                 item['plant'] = {}
         if item.get('plant') and (not (item['position']['y'] - 0.5 <= item['plant']['display_y'] <= item['position']['y'] + 0.5)):
-            print("删除因y不在种植区:", item['plant']['name'])
+            # print("删除因y不在种植区:", item['plant']['name'])
             if item in final_result:  
                 item['plant'] = {}
 
@@ -982,7 +983,7 @@ def fix_plant_zone(final_result):
     occupied = []
 
     for item in final_result:
-        print(item['position']['x'], item['position']['y'], item['plant']['display_x'], item['plant']['display_y'])
+        # print(item['position']['x'], item['position']['y'], item['plant']['display_x'], item['plant']['display_y'])
 
         if not item.get("plant"):
             continue
@@ -1228,7 +1229,7 @@ def resolve_collisions_random_touch_limited(occ, iterations=2, k_attract=0.01, k
                 move1y = max(-max_move, min(max_move, move1y))
                 move2x = max(-max_move, min(max_move, move2x))
                 move2y = max(-max_move, min(max_move, move2y))
-                print(move1x, move1y, move2x, move2y)
+                # print(move1x, move1y, move2x, move2y)
 
                 # 更新位置
                 nx1 = x1 + move1x
