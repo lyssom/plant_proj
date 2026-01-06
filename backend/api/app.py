@@ -862,11 +862,11 @@ def partition6667(data):
             # 主株信息
             center_x = f["plant"]["display_x"]
             center_y = f["plant"]["display_y"]
-            center_r = f["plant"]["display_radius"]
+            center_r = f["plant"].get("display_radius", 0)
 
             # 找所有更小植物
             candidates = [
-                p for p in plants_by_zone[f["type"]]
+                p for p in plants_by_zone.get(f["type"])
                 if float(p.crown_width) / 2 <= center_r and (float(p.crown_width) >= min_crown_width and float(p.crown_width) <= max_crown_width)
             ]
 
